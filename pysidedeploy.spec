@@ -101,7 +101,7 @@ macos.permissions =
 mode = standalone
 
 # specify any extra nuitka arguments
-extra_args = --assume-yes-for-downloads --mingw64 --experimental=force-dependencies-pefile --user-plugin=scripts/nuitka_pe_plugin.py --output-filename=FDXAtelier.exe --include-package=fdx_atelier --include-package=pandera --include-package=phonenumbers.data --nofollow-import-to=pytest,hypothesis,matplotlib,scipy,IPython,notebook,PyQt6,phonenumbers.geodata,phonenumbers.carrierdata,phonenumbers.tzdata --windows-console-mode=disable --jobs=4 --report=build/compilation-report.xml
+extra_args = --assume-yes-for-downloads --mingw64 --experimental=force-dependencies-pefile --user-plugin=scripts/nuitka_pe_plugin.py --output-filename=FDXAtelier.exe --include-package=fdx_atelier --include-package-data=fdx_atelier --include-package=pandera --include-package=phonenumbers.data --nofollow-import-to=pytest,hypothesis,matplotlib,scipy,IPython,notebook,PyQt6,phonenumbers.geodata,phonenumbers.carrierdata,phonenumbers.tzdata --windows-console-mode=disable --jobs=4 --report=build/compilation-report.xml
 
 [buildozer]
 

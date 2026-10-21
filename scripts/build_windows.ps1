@@ -24,6 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw ('Conditionnement en echec : ' + $Packager) }
 $binary = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'dist') -Filter FDXAtelier.exe -Recurse | Select-Object -First 1
 if (-not $binary) { throw 'Executable absent apres compilation' }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $binary.DirectoryName
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs') -Destination $binary.DirectoryName -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\fdx.ico') -Destination $binary.DirectoryName
 & $pythonExe (Join-Path $PSScriptRoot 'package_notices.py') (Join-Path $binary.DirectoryName 'licenses')
 if (-not $ISCC) {

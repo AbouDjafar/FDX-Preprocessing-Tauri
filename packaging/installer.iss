@@ -5,7 +5,7 @@
 [Setup]
 AppId={{C15E7ECA-9337-4321-88A8-049EBC758E20}
 AppName=FDX Atelier Donnees
-AppVersion=1.0.0
+AppVersion=1.1.0
 AppPublisher=FDX
 DefaultDirName={localappdata}\Programs\FDXAtelier
 DefaultGroupName=FDX Atelier Donnees
@@ -13,7 +13,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=FDXAtelier-Installation-1.0.0
+OutputBaseFilename=FDXAtelier-Installation-1.1.0
 SetupIconFile=..\assets\fdx.ico
 UninstallDisplayIcon={app}\FDXAtelier.exe
 Compression=lzma2

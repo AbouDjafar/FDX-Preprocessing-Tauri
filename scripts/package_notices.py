@@ -15,6 +15,9 @@ def collect(destination):
     supplement = Path(__file__).resolve().parents[1] / "packaging" / "third_party_licenses"
     if supplement.is_dir():
         shutil.copytree(supplement, root / "supplement", dirs_exist_ok=True)
+    icons_license = Path(__file__).resolve().parents[1] / "src/fdx_atelier/assets/icons/LICENSE"
+    if icons_license.exists():
+        shutil.copy2(icons_license, root / "Lucide-LICENSE.txt")
     lines = [
         "# Third-party components",
         "",

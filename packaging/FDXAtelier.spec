@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 root = Path(SPECPATH).parent
 hidden = collect_submodules("phonenumbers.data") + collect_submodules("pandera.backends.pandas")
@@ -13,7 +13,7 @@ analysis = Analysis(
     [str(root / "main.py")],
     pathex=[str(root / "src")],
     binaries=[],
-    datas=metadata,
+    datas=metadata + collect_data_files("fdx_atelier", includes=["assets/icons/*"]),
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],

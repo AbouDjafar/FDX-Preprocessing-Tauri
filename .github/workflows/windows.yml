@@ -1,0 +1,64 @@
+name: Windows - Tests et distribution
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - name: Installer les dependances
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+          .\.venv\Scripts\python.exe -m pip install -e . --no-build-isolation
+      - name: Lint et tests
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\python.exe -m ruff check src tests scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m pytest -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m fdx_atelier selftest --output qa\source\verification.json
+      - name: Construire la distribution
+        shell: pwsh
+        run: |
+          $compiler = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $compiler) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $compiler = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' | Select-Object -First 1
+          }
+          .\scripts\build_windows.ps1 -SkipTests -ISCC $compiler.FullName
+      - name: Verifier executable et installateur
+        shell: pwsh
+        run: .\scripts\verify_windows.ps1 -TestInstaller
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: FDX-Atelier-Windows
+          path: |
+            dist/FDXAtelier-Installation-*.exe
+            dist/FDXAtelier.dist/
+            qa/source/
+            qa/windows/portable/verification.json
+          retention-days: 14
