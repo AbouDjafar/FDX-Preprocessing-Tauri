@@ -18,7 +18,7 @@ if ($Packager -eq 'Nuitka') {
     $deployScript = Join-Path $projectRoot '.venv\Lib\site-packages\PySide6\scripts\deploy.py'
     & $pythonExe $deployScript -c (Join-Path $projectRoot 'pysidedeploy.spec') --no-install -f --keep-deployment-files --extra-ignore-dirs=.venv,tests,qa,build,dist,.build-tools
 } else {
-    & $pythonExe -m PyInstaller --noconfirm --distpath dist --workpath build\pyinstaller packaging\FDXAtelier.spec
+    & $pythonExe -m PyInstaller --clean --noconfirm --distpath dist --workpath build\pyinstaller packaging\FDXAtelier.spec
 }
 if ($LASTEXITCODE -ne 0) { throw ('Conditionnement en echec : ' + $Packager) }
 $binary = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'dist') -Filter FDXAtelier.exe -Recurse | Select-Object -First 1

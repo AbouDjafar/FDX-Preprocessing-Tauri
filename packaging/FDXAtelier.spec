@@ -1,6 +1,15 @@
+import os
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+
+# Resolve Windows libraries from Windows, never unrelated applications in PATH.
+# In particular, third-party icuuc.dll builds do not expose the Windows ICU API.
+windows = Path(os.environ["WINDIR"])
+os.environ["PATH"] = os.pathsep.join(str(p) for p in (
+    windows / "System32", windows, Path(sys.base_prefix), Path(sys.base_prefix) / "DLLs",
+))
 
 root = Path(SPECPATH).parent
 hidden = collect_submodules("phonenumbers.data") + collect_submodules("pandera.backends.pandas")

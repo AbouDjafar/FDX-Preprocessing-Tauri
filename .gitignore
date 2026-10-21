@@ -26,3 +26,6 @@ sessions/
 .env*
 !.env.example
 
+# Generated application icons (source: scripts/make_icon.py).
+/assets/fdx.ico
+/assets/fdx.png
