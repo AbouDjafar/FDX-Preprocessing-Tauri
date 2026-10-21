@@ -54,6 +54,7 @@ def save_project(
     decisions: dict[str, Decision],
     history: list[dict] | None = None,
     result=None,
+    ui_state: dict | None = None,
 ) -> None:
     path = Path(path)
     if path.resolve() in {
@@ -75,6 +76,7 @@ def save_project(
                 "source_hash": sha256(config.source_path),
                 "dictionary": Path(config.dictionary_path).read_bytes() if config.dictionary_path else b"",
                 "result": result.model_dump_json() if result is not None else "",
+                "ui_state": json.dumps(ui_state or {}, ensure_ascii=False),
             }
             db.executemany("INSERT INTO project(key, value) VALUES (?, ?)", items.items())
         os.replace(temp, path)
@@ -108,3 +110,11 @@ def open_project(
         config.dictionary_path = str(dictionary)
     decisions = TypeAdapter(dict[str, Decision]).validate_json(data["decisions"])
     return config, decisions, json.loads(data.get("history", "[]"))
+
+
+def project_ui_state(path: str | Path) -> dict:
+    uri = Path(path).resolve().as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as db:
+        row = db.execute("SELECT value FROM project WHERE key = 'ui_state'").fetchone()
+    state = json.loads(row[0]) if row else {}
+    return state if isinstance(state, dict) else {}

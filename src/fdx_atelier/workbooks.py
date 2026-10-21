@@ -122,6 +122,16 @@ def inspect_workbook(path: str | Path, header_row: int = 1, cancel=None) -> dict
         check_cancel(cancel)
         for sheet in workbook.worksheets:
             check_cancel(cancel)
+            first_rows = list(sheet.iter_rows(min_row=1, max_row=min(20, sheet.max_row), values_only=True))
+            candidates = []
+            for number, values in enumerate(first_rows, 1):
+                filled = [v for v in values if v is not None and str(v).strip()]
+                text = sum(isinstance(v, str) and not v.startswith("=") for v in filled)
+                unique = len({str(v).strip().lower() for v in filled})
+                score = text * 2 + unique - (len(filled) - text) * 2
+                # Column headers usually precede data and are mostly distinct text.
+                candidates.append((score if len(filled) > 1 else 0, -number))
+            suggestion = -max(candidates)[1] if candidates else 1
             preview = list(
                 sheet.iter_rows(
                     min_row=header_row, max_row=min(sheet.max_row, header_row + 8), values_only=True
@@ -134,12 +144,19 @@ def inspect_workbook(path: str | Path, header_row: int = 1, cancel=None) -> dict
                     "columns": sheet.max_column,
                     "headers": list(preview[0]) if preview else [],
                     "preview": preview[1:],
+                    "suggested_header": suggestion,
                 }
             )
     finally:
         workbook.close()
     check_cancel(cancel)
-    return {"path": str(path), "sheets": sheets}
+    usable = [
+        s
+        for s in sheets
+        if s["name"].casefold() not in {"contrôle", "nom_original", "à vérifier", "a verifier"}
+    ]
+    suggested = max(usable or sheets, key=lambda s: s["rows"] * s["columns"])["name"]
+    return {"path": str(path), "sheets": sheets, "suggested_sheet": suggested}
 
 
 def check_cancel(event) -> None:

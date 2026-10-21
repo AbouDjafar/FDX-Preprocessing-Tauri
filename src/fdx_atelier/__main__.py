@@ -17,8 +17,9 @@ def main(argv=None):
     inspect = commands.add_parser("inspect", help="Examiner un classeur sans le modifier")
     inspect.add_argument("workbook")
     inspect.add_argument("--header-row", type=int, default=1)
-    selftest = commands.add_parser("selftest", help="Vérifier le moteur et les six écrans hors ligne")
+    selftest = commands.add_parser("selftest", help="Vérifier le moteur et les quatre étapes hors ligne")
     selftest.add_argument("--output", required=True)
+    selftest.add_argument("--scale", type=float, default=1.0)
     for name in ("analyze", "export"):
         command = commands.add_parser(name)
         command.add_argument("--config", required=True, help="Configuration JSON complète")
@@ -36,7 +37,7 @@ def main(argv=None):
         if args.command == "selftest":
             from .selftest import run
 
-            run(args.output)
+            run(args.output, args.scale)
             return 0
         if args.command == "inspect":
             from .workbooks import inspect_workbook

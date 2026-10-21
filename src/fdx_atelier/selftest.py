@@ -8,15 +8,18 @@ import tempfile
 from pathlib import Path
 
 
-def run(output: str):
+def run(output: str, scale: float = 1.0):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ["QT_SCALE_FACTOR"] = str(scale)
     from openpyxl import Workbook, load_workbook
     from PySide6.QtWidgets import QApplication
 
     from .engine import analyze
     from .exporter import export_excel
     from .models import ColumnMapping, DataType, Decision, FieldRule, FieldSpec, ProjectConfig, Role, cell_key
-    from .ui.app import STYLE, MainWindow
+    from .ui.app import MainWindow
+    from .ui.session import decision_stamp
+    from .ui.theme import apply_theme
     from .workbooks import inspect_workbook, sha256
 
     output = Path(output).resolve()
@@ -67,8 +70,7 @@ def run(output: str):
         assert wb.active["B2"].value == "699123456"
         wb.close()
         app = QApplication.instance() or QApplication([])
-        app.setStyle("Fusion")
-        app.setStyleSheet(STYLE)
+        apply_theme(app)
         window = MainWindow()
         errors = []
         window.show_error = lambda error: errors.append(str(error))
@@ -77,17 +79,28 @@ def run(output: str):
         window.import_page.load()
         window.show()
         screenshots = []
-        for width, height in [(1360, 900), (1024, 768)]:
+        viewports = (
+            [(1920, 1080), (1366, 768), (1024, 768)]
+            if scale == 1
+            else [(int(1920 / scale), int(1080 / scale))]
+        )
+        for width, height in viewports:
             window.resize(width, height)
-            for step in range(6):
+            for step in range(4):
+                if step == 2:
+                    result = analyze(window.config)
+                    window.session.accept(result, decision_stamp(window.decisions))
                 window.navigate(step)
-                if step >= 4:
-                    window.result = analyze(window.config)
-                    window.pages[step].load()
                 app.processEvents()
                 name = output.parent / f"interface-{width}-{step + 1}.png"
                 assert window.grab().save(str(name))
                 screenshots.append(str(name))
+            window.navigate(1)
+            window.advanced_toggle.setChecked(True)
+            window.prepare_page.tabs.setCurrentIndex(2)
+            app.processEvents()
+            window.grab().save(str(output.parent / f"avance-{width}.png"))
+            window.advanced_toggle.setChecked(False)
         assert not errors, errors
         window.dirty = False
         window.close()
@@ -95,8 +108,10 @@ def run(output: str):
         report = {
             "ok": True,
             "rows": result.row_count,
-            "gui_steps": 6,
-            "viewports": 2,
+            "gui_steps": 4,
+            "viewports": len(viewports),
+            "scale": scale,
+            "device_pixel_ratio": window.devicePixelRatioF(),
             "screenshots": screenshots,
             "engine": True,
             "pandera": True,

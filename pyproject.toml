@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fdx-atelier"
-version = "1.0.0"
+version = "1.1.0"
 description = "Atelier Windows de preparation et de validation de donnees Excel"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,6 +22,9 @@ fdx-atelier = "fdx_atelier.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+fdx_atelier = ["assets/icons/*.svg", "assets/icons/LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

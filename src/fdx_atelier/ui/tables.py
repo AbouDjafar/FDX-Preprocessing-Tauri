@@ -54,7 +54,7 @@ class ReviewModel(QAbstractTableModel):
             row["field_code"],
             display(row["original"]),
             display(row["current"]),
-            row["message"],
+            ("À vérifier · " if row.get("pending") else "") + row["message"],
         ]
         if role == Qt.ItemDataRole.DisplayRole:
             return values[index.column()]
@@ -65,7 +65,7 @@ class ReviewModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.ForegroundRole and index.column() == 0:
             from PySide6.QtGui import QColor
 
-            return QColor("#13735b" if row["kind"] == "change" else "#9b5225")
+            return QColor("#82e1bd" if row["kind"] == "change" else "#f0c578")
         return None
 
 

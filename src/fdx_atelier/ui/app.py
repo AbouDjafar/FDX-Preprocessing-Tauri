@@ -1,68 +1,54 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QStandardPaths, QThread, QTranslator, Signal
+from PySide6.QtCore import QLibraryInfo, QSignalBlocker, QStandardPaths, Qt, QThread, QTranslator, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QFileDialog,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
-    QListWidget,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
     QStackedWidget,
-    QStyle,
-    QToolBar,
+    QToolButton,
     QVBoxLayout,
+    QWhatsThis,
     QWidget,
 )
 
 from .. import __version__
+from ..demo import create_demo
+from ..dictionary import parse_dictionary, read_text
 from ..engine import analyze
 from ..exporter import REPORTS, export_excel
-from ..models import Cancelled, Decision, FieldRule, ProjectConfig, display
-from ..storage import load_profile, open_project, save_profile, save_project
+from ..models import Cancelled, Decision, FieldRule, display
+from ..storage import load_profile, open_project, project_ui_state, save_profile, save_project
 from ..transforms import split_phones, valid_phone
 from ..workbooks import inspect_workbook
 from .fonts import ensure_fonts
-from .pages import DictionaryPage, ExportPage, ImportPage, MappingPage, ReviewPage, RulesPage
+from .icons import icon
+from .pages import ExportPage, ImportPage
+from .prepare import PreparePage
+from .review import ReviewPage
+from .session import SessionController, decision_stamp
+from .theme import apply_theme
 
-STYLE = """
-QMainWindow, QScrollArea, QStackedWidget { background: #f4f6f7; }
-QWidget { color: #233039; font-family: 'Segoe UI'; font-size: 10pt; }
-QToolBar { background: white; border: none; border-bottom: 1px solid #d9e0e3; spacing: 10px; padding: 8px; }
-QListWidget { background: #183c46; color: #e4eff0; border: none; padding: 12px 4px; }
-QListWidget::item { padding: 15px 12px; margin: 3px 4px; border-radius: 4px; }
-QListWidget::item:selected { background: #27606a; color: white; }
-QLabel[heading=true] { font-size: 14pt; font-weight: 600; padding: 8px 0; }
-QGroupBox { font-weight: 600; border: 1px solid #d4dfe3; border-radius: 5px; margin-top: 13px; padding: 15px; background: white; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
-QLineEdit, QSpinBox, QComboBox, QPlainTextEdit { background: white; border: 1px solid #b7c8cf; border-radius: 3px; padding: 6px; min-height: 20px; }
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus { border-color: #167969; }
-QComboBox QAbstractItemView { background: white; color: #233039; selection-background-color: #d9eeeb; }
-QPushButton { background: white; border: 1px solid #b8c9cf; padding: 8px 13px; border-radius: 4px; min-height: 19px; }
-QPushButton:hover { background: #e7f0f1; border-color: #6e9a9b; }
-QPushButton:disabled { color: #8a989e; background: #edf0f1; }
-QPushButton[primary=true] { background: #167965; color: white; border-color: #167965; font-weight: 600; }
-QTableView, QTableWidget { background: white; alternate-background-color: #f4f7f8; gridline-color: #e2e7e9; border: 1px solid #d3dde1; selection-background-color: #d8ecee; selection-color: #123d48; }
-QHeaderView::section { background: #e5edf0; padding: 8px; border: none; border-right: 1px solid #cedbdf; color: #28444e; font-weight: 600; }
-QStatusBar { background: white; border-top: 1px solid #d9e0e3; }
-QProgressBar { background: #e6ecef; border: none; min-height: 7px; max-height: 9px; }
-QProgressBar::chunk { background: #238b76; }
-QCheckBox { spacing: 7px; }
-"""
+TITLES = ["Mes fichiers", "Préparer les données", "Vérifier les résultats", "Enregistrer le résultat"]
 
 
 class Job(QThread):
     succeeded = Signal(object)
-    failed = Signal(str)
+    failed = Signal(object)
     progress = Signal(int, int, str)
 
     def __init__(self, function, parent=None):
@@ -72,199 +58,385 @@ class Job(QThread):
 
     def run(self):
         try:
-            result = self.function(self.cancel, self.progress.emit)
-            self.succeeded.emit(result)
-        except Cancelled as exc:
-            self.failed.emit(str(exc))
+            self.succeeded.emit(self.function(self.cancel, self.progress.emit))
         except Exception as exc:
-            self.failed.emit(f"{type(exc).__name__} : {exc}")
+            self.failed.emit(exc)
 
 
 class MainWindow(QMainWindow):
+    config = property(lambda s: s.session.config, lambda s, v: setattr(s.session, "config", v))
+    decisions = property(lambda s: s.session.decisions, lambda s, v: setattr(s.session, "decisions", v))
+    history = property(lambda s: s.session.history, lambda s, v: setattr(s.session, "history", v))
+    redo_history = property(
+        lambda s: s.session.redo_history, lambda s, v: setattr(s.session, "redo_history", v)
+    )
+    result = property(lambda s: s.session.result, lambda s, v: setattr(s.session, "result", v))
+    dirty = property(lambda s: s.session.dirty, lambda s, v: setattr(s.session, "dirty", v))
+    advanced = property(lambda s: s.session.advanced)
+
     def __init__(self):
         super().__init__()
         ensure_fonts()
-        self.setWindowTitle(f"FDX Atelier Données · {__version__}")
-        self.resize(1360, 900)
-        self.setMinimumSize(1024, 680)
-        self.config = ProjectConfig()
-        self.decisions: dict[str, Decision] = {}
-        self.history: list[dict] = []
-        self.redo_history: list[dict] = []
+        self.session = SessionController()
         self.metadata = None
         self.dictionary_notes = []
-        self.result = None
-        self.dirty = False
         self.busy = False
         self.job = None
-        self._closing = False
         self.step = 0
         self.project_path = None
+        self._closing = False
+        self._demo_folders = []
+        self.setWindowTitle(f"FDX Atelier Données · {__version__}")
+        self.setWindowIcon(icon("file-spreadsheet", "#78dfc7"))
+        self.resize(1366, 850)
+        self.setMinimumSize(800, 500)
         self.build_ui()
 
     def build_ui(self):
-        bar = QToolBar("Projet")
-        bar.setMovable(False)
-        self.addToolBar(bar)
-        actions = [
-            ("Nouveau", QStyle.StandardPixmap.SP_FileIcon, self.new_project),
-            ("Ouvrir un projet", QStyle.StandardPixmap.SP_DialogOpenButton, self.open_session),
-            ("Enregistrer le projet", QStyle.StandardPixmap.SP_DialogSaveButton, self.save_session),
-            ("Charger un profil", QStyle.StandardPixmap.SP_ArrowDown, self.import_profile),
-            ("Enregistrer le profil", QStyle.StandardPixmap.SP_ArrowUp, self.export_profile),
-        ]
-        self.toolbar_actions = []
-        for text, icon, callback in actions:
-            action = QAction(self.style().standardIcon(icon), text, self)
+        shell = QWidget()
+        shell.setObjectName("shell")
+        main = QVBoxLayout(shell)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
+        top = QWidget()
+        top.setObjectName("topbar")
+        bar = QHBoxLayout(top)
+        bar.setContentsMargins(20, 12, 20, 12)
+        brand = QLabel("FDX Atelier")
+        brand.setObjectName("brand")
+        bar.addWidget(brand)
+        version = QLabel(f"DONNÉES  /  {__version__}")
+        version.setObjectName("eyebrow")
+        bar.addWidget(version)
+        bar.addStretch()
+        menu_button = QToolButton()
+        menu_button.setText("Projet")
+        menu_button.setIcon(icon("folder"))
+        menu_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(menu_button)
+        for text, symbol, callback in [
+            ("Nouveau projet", "plus", self.new_project),
+            ("Ouvrir un projet", "folder-open", self.open_session),
+            ("Enregistrer le projet", "save", self.save_session),
+            ("Charger un profil", "download", self.import_profile),
+            ("Enregistrer un profil", "upload", self.export_profile),
+        ]:
+            action = QAction(icon(symbol), text, self)
             action.triggered.connect(callback)
-            bar.addAction(action)
-            self.toolbar_actions.append(action)
-        central = QWidget()
-        outer = QHBoxLayout(central)
-        outer.setContentsMargins(0, 0, 0, 0)
-        self.sidebar = QListWidget()
-        self.sidebar.setObjectName("stepNavigation")
-        self.sidebar.setFixedWidth(218)
-        self.sidebar.addItems(
-            [
-                "1  Importer",
-                "2  Dictionnaire",
-                "3  Associations",
-                "4  Paramètres",
-                "5  Examiner",
-                "6  Exporter",
-            ]
-        )
-        outer.addWidget(self.sidebar)
+            menu.addAction(action)
+        menu_button.setMenu(menu)
+        bar.addWidget(menu_button)
+        self.project_menu = menu_button
+        self.advanced_toggle = QCheckBox("Mode avancé")
+        self.advanced_toggle.setObjectName("advancedMode")
+        self.advanced_toggle.setToolTip("Afficher le dictionnaire complet et les corrections groupées.")
+        self.advanced_toggle.toggled.connect(self.set_advanced)
+        bar.addWidget(self.advanced_toggle)
+        help_button = QToolButton()
+        help_button.setIcon(icon("circle-question-mark"))
+        help_button.setAccessibleName("Aide contextuelle")
+        help_button.setToolTip("Aide sur un champ ou une commande")
+        help_button.clicked.connect(QWhatsThis.enterWhatsThisMode)
+        bar.addWidget(help_button)
+        main.addWidget(top)
+        center = QHBoxLayout()
+        center.setSpacing(0)
+        self.sidebar = QWidget()
+        self.sidebar.setObjectName("navigation")
+        self.sidebar.setFixedWidth(196)
+        navigation = QVBoxLayout(self.sidebar)
+        navigation.setContentsMargins(12, 24, 12, 18)
+        self.nav_buttons = []
+        for index, (text, symbol) in enumerate(
+            zip(
+                ["Mes fichiers", "Préparer", "Vérifier", "Enregistrer"],
+                ["file-spreadsheet", "settings-2", "list-checks", "download"],
+                strict=True,
+            )
+        ):
+            b = QPushButton(f"{index + 1}   {text}")
+            b.setIcon(icon(symbol))
+            b.setProperty("nav", True)
+            b.setCheckable(True)
+            b.setAccessibleName(f"Étape {index + 1} : {text}")
+            b.setToolTip(text)
+            b.clicked.connect(lambda checked=False, i=index: self.navigate(i))
+            navigation.addWidget(b)
+            self.nav_buttons.append(b)
+        navigation.addStretch()
+        local = QLabel("FDX  ·  LOCAL")
+        self.local_label = local
+        local.setProperty("muted", True)
+        navigation.addWidget(local)
+        center.addWidget(self.sidebar)
         body = QVBoxLayout()
-        body.setContentsMargins(24, 15, 24, 16)
-        self.title = QLabel("Importer")
-        self.title.setProperty("heading", True)
+        body.setContentsMargins(28, 20, 28, 18)
+        self.step_label = QLabel("ÉTAPE 1 SUR 4")
+        self.step_label.setObjectName("stepNumber")
+        body.addWidget(self.step_label)
+        self.title = QLabel(TITLES[0])
+        self.title.setObjectName("pageTitle")
+        self.title.setWordWrap(True)
         body.addWidget(self.title)
+        self.file_context = QLabel("Nouveau projet")
+        self.file_context.setProperty("muted", True)
+        self.file_context.setWordWrap(True)
+        body.addWidget(self.file_context)
         self.stack = QStackedWidget()
         self.import_page = ImportPage(self)
-        self.dictionary_page = DictionaryPage(self)
-        self.mapping_page = MappingPage(self)
-        self.rules_page = RulesPage(self)
+        self.prepare_page = PreparePage(self)
+        self.mapping_page = self.prepare_page.mapping
+        self.dictionary_page = self.prepare_page.dictionary
+        self.rules_page = self.prepare_page.rules
         self.review_page = ReviewPage(self)
         self.export_page = ExportPage(self)
-        self.pages = [
-            self.import_page,
-            self.dictionary_page,
-            self.mapping_page,
-            self.rules_page,
-            self.review_page,
-            self.export_page,
-        ]
+        self.export_page.export_button.hide()
+        self.pages = [self.import_page, self.prepare_page, self.review_page, self.export_page]
         for page in self.pages:
+            page.setObjectName("page")
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QScrollArea.Shape.NoFrame)
             scroll.setWidget(page)
             self.stack.addWidget(scroll)
         body.addWidget(self.stack, 1)
-        navigation = QHBoxLayout()
-        self.previous_button = QPushButton("Précédent")
-        self.previous_button.clicked.connect(lambda: self.navigate(self.step - 1))
-        self.next_button = QPushButton("Suivant")
-        self.next_button.setProperty("primary", True)
-        self.next_button.clicked.connect(lambda: self.navigate(self.step + 1))
-        navigation.addWidget(self.previous_button)
-        navigation.addStretch()
-        self.cancel_button = QPushButton("Annuler le traitement")
-        self.cancel_button.clicked.connect(self.cancel_job)
-        self.cancel_button.hide()
-        navigation.addWidget(self.cancel_button)
-        navigation.addWidget(self.next_button)
-        body.addLayout(navigation)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.hide()
         body.addWidget(self.progress)
-        outer.addLayout(body, 1)
-        self.setCentralWidget(central)
-        self.sidebar.currentRowChanged.connect(self.navigate)
-        self.sidebar.setCurrentRow(0)
-        self.statusBar().showMessage("Nouveau projet")
-        undo = QAction("Annuler la décision", self)
-        undo.setShortcut(QKeySequence.StandardKey.Undo)
-        undo.triggered.connect(self.undo_decision)
-        self.addAction(undo)
-        self.previous_button.setEnabled(False)
+        footer = QHBoxLayout()
+        self.previous_button = QPushButton("Retour")
+        self.previous_button.setIcon(icon("arrow-left"))
+        self.previous_button.clicked.connect(lambda: self.navigate(self.step - 1))
+        footer.addWidget(self.previous_button)
+        footer.addStretch()
+        self.cancel_button = QPushButton("Annuler le traitement")
+        self.cancel_button.setIcon(icon("x"))
+        self.cancel_button.clicked.connect(self.cancel_job)
+        self.cancel_button.hide()
+        footer.addWidget(self.cancel_button)
+        self.next_button = QPushButton()
+        self.next_button.setObjectName("primaryAction")
+        self.next_button.setProperty("primary", True)
+        self.next_button.setIcon(icon("arrow-right", "#112c26"))
+        self.next_button.clicked.connect(self.next_action)
+        footer.addWidget(self.next_button)
+        body.addLayout(footer)
+        center.addLayout(body, 1)
+        main.addLayout(center, 1)
+        self.setCentralWidget(shell)
+        for label, key, callback in [
+            ("Annuler la décision", QKeySequence.StandardKey.Undo, self.undo_decision),
+            ("Rétablir la décision", QKeySequence.StandardKey.Redo, self.redo_decision),
+            ("Enregistrer le projet", QKeySequence.StandardKey.Save, self.save_session),
+        ]:
+            action = QAction(label, self)
+            action.setShortcut(key)
+            action.triggered.connect(callback)
+            self.addAction(action)
+        for widget in shell.findChildren(QWidget):
+            if isinstance(widget, QLabel):
+                widget.setTextFormat(Qt.TextFormat.PlainText)
+            if widget.toolTip():
+                widget.setWhatsThis(widget.toolTip())
+        self.update_navigation()
 
-    def collect_current(self):
-        old = self.config.fingerprint()
-        self.pages[self.step].collect()
-        if self.config.fingerprint() != old:
-            self.invalidate()
-
-    def navigate(self, index):
-        if index < 0 or index >= 6 or self.busy:
-            return
-        try:
-            self.collect_current()
-            if index > 0 and (not self.config.source_path or not self.metadata):
-                raise ValueError("Sélectionnez un classeur Excel et sa feuille de données.")
-            if index >= 2 and not self.config.fields:
-                raise ValueError("Importez ou renseignez les champs du dictionnaire.")
-            if index == 3 and not self.config.mappings:
-                self.mapping_page.load()
-            self.step = index
-            self.stack.setCurrentIndex(index)
-            self.pages[index].load()
-            self.title.setText(
-                [
-                    "Importer",
-                    "Confirmer le dictionnaire",
-                    "Associer les colonnes",
-                    "Paramétrer le traitement",
-                    "Examiner les résultats",
-                    "Exporter le classeur",
-                ][index]
-            )
-            self.sidebar.blockSignals(True)
-            self.sidebar.setCurrentRow(index)
-            self.sidebar.blockSignals(False)
-            self.previous_button.setEnabled(index > 0)
-            self.next_button.setVisible(index < 5)
-        except Exception as exc:
-            self.sidebar.blockSignals(True)
-            self.sidebar.setCurrentRow(self.step)
-            self.sidebar.blockSignals(False)
-            self.show_error(exc)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "sidebar"):
+            compact = self.width() < 1100
+            self.sidebar.setFixedWidth(72 if compact else 196)
+            for i, button in enumerate(self.nav_buttons):
+                button.setText(
+                    ""
+                    if compact
+                    else f"{i + 1}   {['Mes fichiers', 'Préparer', 'Vérifier', 'Enregistrer'][i]}"
+                )
+            self.local_label.setText("FDX" if compact else "FDX  ·  LOCAL")
 
     def sheet_info(self):
         return next(
             (s for s in (self.metadata or {}).get("sheets", []) if s["name"] == self.config.sheet), None
         )
 
+    def collect_current(self):
+        before = self.config.fingerprint()
+        self.pages[self.step].collect()
+        if self.config.fingerprint() != before:
+            self.invalidate()
+
     def invalidate(self):
         self.result = None
+        self.session.analyzed_stamp = ""
         self.dirty = True
-        self.review_page.load()
-        self.export_page.output.clear()
-        self.statusBar().showMessage("Paramètres modifiés : analyse à actualiser")
+        if hasattr(self, "export_page"):
+            self.export_page.published_path = None
+            self.export_page.output.clear()
+            self.review_page.load()
+            self.update_navigation()
+
+    def update_navigation(self):
+        if not hasattr(self, "next_button"):
+            return
+        confirmed = any(m.field_code for m in self.config.mappings) and all(
+            m.confirmed for m in self.config.mappings if m.field_code
+        )
+        text = [
+            "Confirmer mes fichiers",
+            "Analyser le fichier" if confirmed else "Confirmer les colonnes",
+            "Choisir le fichier de sortie" if self.session.current else "Vérifier mes corrections",
+            "Ouvrir mon fichier" if self.export_page.published_path else "Créer mon fichier Excel",
+        ][self.step]
+        self.next_button.setText(text)
+        ready = bool(self.config.source_path and self.config.fields and self.metadata)
+        self.next_button.setEnabled(not self.busy and (self.step != 0 or ready))
+        if self.step == 3:
+            self.next_button.setEnabled(not self.busy and self.session.current)
+        self.next_button.setToolTip(
+            "Choisir le classeur et son dictionnaire pour continuer."
+            if self.step == 0 and not ready
+            else text
+        )
+        self.next_button.setWhatsThis(self.next_button.toolTip())
+        self.previous_button.setEnabled(self.step > 0 and not self.busy)
+        for i, button in enumerate(self.nav_buttons):
+            button.setChecked(i == self.step)
+            button.setIcon(
+                icon(
+                    "circle-check"
+                    if i < self.step
+                    else ["file-spreadsheet", "settings-2", "list-checks", "download"][i],
+                    "#78dfc7" if i <= self.step else "#bbc3cf",
+                )
+            )
+            button.setEnabled(not self.busy and (i == 0 or ready))
+            state = "Terminée" if i < self.step else "En cours" if i == self.step else "À venir"
+            button.setToolTip(f"{TITLES[i]} · {state}")
+        self.title.setText(TITLES[self.step])
+        self.step_label.setText(f"ÉTAPE {self.step + 1} SUR 4")
+        path = self.config.original_path or self.config.source_path
+        self.file_context.setText(
+            (Path(path).name + (f"  /  {self.config.sheet}" if self.config.sheet else ""))
+            if path
+            else "Nouveau projet"
+        )
+        self.statusBar().showMessage(
+            "Traitement en cours"
+            if self.busy
+            else "Décisions à vérifier"
+            if self.result and not self.session.current
+            else "Données conservées sur ce poste"
+        )
+
+    def navigate(self, index):
+        if not 0 <= index < 4 or self.busy:
+            return
+        try:
+            self.collect_current()
+            if index > 0 and (not self.metadata or not self.config.fields):
+                raise ValueError("Choisissez le fichier Excel et son dictionnaire avant de continuer.")
+            if index >= 2:
+                self.config.validate_ready()
+                if self.result is None:
+                    self.run_analysis(lambda: self.navigate(index))
+                    return
+            if index == 3 and not self.session.current:
+                raise ValueError("Vérifiez vos dernières corrections avant de créer le fichier.")
+            self.step = index
+            self.stack.setCurrentIndex(index)
+            self.pages[index].load()
+            self.update_navigation()
+        except Exception as exc:
+            self.show_error(exc)
+
+    def next_action(self):
+        if self.busy:
+            return
+        try:
+            self.collect_current()
+            if self.step == 0:
+                self.navigate(1)
+            elif self.step == 1:
+                if not self.config.mappings or any(
+                    not m.confirmed for m in self.config.mappings if m.field_code
+                ):
+                    self.prepare_page.confirm()
+                    self.prepare_page.tabs.setCurrentIndex(1)
+                    self.update_navigation()
+                else:
+                    self.run_analysis(lambda: self.navigate(2))
+            elif self.step == 2:
+                if self.session.current:
+                    self.navigate(3)
+                else:
+                    self.run_analysis()
+            elif self.export_page.published_path:
+                self.export_page.open_result()
+            else:
+                self.run_export()
+        except Exception as exc:
+            self.show_error(exc)
+
+    def set_advanced(self, enabled):
+        try:
+            self.collect_current()
+            self.session.advanced = enabled
+            self.prepare_page.set_advanced(enabled)
+            self.review_page.load()
+            self.dirty = True
+        except Exception as exc:
+            with QSignalBlocker(self.advanced_toggle):
+                self.advanced_toggle.setChecked(self.advanced)
+            self.show_error(exc)
+
+    def set_dictionary(self, path):
+        try:
+            parsed = parse_dictionary(read_text(path))
+            if not parsed.fields:
+                raise ValueError(
+                    "Aucun champ reconnu dans ce dictionnaire. Choisissez un tableau .md ou .txt contenant les colonnes attendues."
+                )
+            self.config.dictionary_path = str(Path(path).resolve())
+            self.config.fields = parsed.fields
+            self.config.mappings = []
+            self.config.rules = {}
+            self.decisions, self.history, self.redo_history = {}, [], []
+            self.dictionary_notes = parsed.notes
+            self.invalidate()
+            self.import_page.load()
+        except Exception as exc:
+            self.show_error(exc)
 
     def set_source(self, path):
+        if self.busy:
+            return
         self.config.source_path = str(Path(path).resolve())
         self.config.original_path = self.config.source_path
+        self.config.sheet = ""
+        self.config.header_row = 1
         self.config.mappings = []
-        self.decisions = {}
-        self.history = []
-        self.redo_history = []
+        self.decisions, self.history, self.redo_history = {}, [], []
+        self.metadata = None
         self.invalidate()
         self.export_page.path.clear()
-        self.refresh_source()
+        self.refresh_source(suggest=True)
 
-    def refresh_source(self, callback=None):
+    def refresh_source(self, callback=None, suggest=False):
         path, header = self.config.source_path, self.config.header_row
 
         def success(metadata):
             self.metadata = metadata
             names = [s["name"] for s in metadata["sheets"]]
             if self.config.sheet not in names:
-                self.config.sheet = "Feuil2" if "Feuil2" in names else names[0]
+                self.config.sheet = metadata.get("suggested_sheet", names[0])
+            suggestion = self.sheet_info().get("suggested_header", header)
+            if suggest and suggestion != header:
+                self.config.header_row = suggestion
+                self.refresh_source(callback)
+                return
             self.import_page.load()
+            self.update_navigation()
             if callback:
                 callback()
 
@@ -274,40 +446,37 @@ class MainWindow(QMainWindow):
         if self.busy:
             return
         self.busy = True
-        self.sidebar.setEnabled(False)
         self.stack.setEnabled(False)
-        for action in self.toolbar_actions:
-            action.setEnabled(False)
-        self.previous_button.setEnabled(False)
-        self.next_button.setEnabled(False)
+        self.project_menu.setEnabled(False)
+        self.advanced_toggle.setEnabled(False)
         self.cancel_button.show()
         self.progress.setRange(0, 0)
         self.progress.show()
+        self.update_navigation()
         job = Job(function, self)
         self.job = job
         pending = {}
         job.succeeded.connect(lambda value: pending.update(result=value))
-        job.failed.connect(lambda message: pending.update(error=message))
+        job.failed.connect(lambda error: pending.update(error=error))
         job.progress.connect(self.show_progress)
 
         def finished():
             self.busy = False
-            self.sidebar.setEnabled(True)
             self.stack.setEnabled(True)
-            for action in self.toolbar_actions:
-                action.setEnabled(True)
-            self.previous_button.setEnabled(self.step > 0)
-            self.next_button.setEnabled(True)
+            self.project_menu.setEnabled(True)
+            self.advanced_toggle.setEnabled(True)
             self.cancel_button.hide()
             self.progress.hide()
             self.job = None
             job.deleteLater()
+            self.update_navigation()
             if self._closing:
+                self._closing = False
                 self.close()
                 return
             if "error" in pending:
-                if "annulée" in pending["error"]:
-                    self.statusBar().showMessage(pending["error"])
+                if isinstance(pending["error"], Cancelled):
+                    self.statusBar().showMessage("Traitement annulé · aucun fichier final créé")
                 else:
                     self.show_error(pending["error"])
             elif "result" in pending:
@@ -319,25 +488,30 @@ class MainWindow(QMainWindow):
     def show_progress(self, value, total, message):
         self.progress.setRange(0, max(total, 1))
         self.progress.setValue(value)
-        self.statusBar().showMessage(message)
+        self.statusBar().showMessage(f"{message} · {value} / {total}" if total > 1 else message)
 
     def cancel_job(self):
         if self.job:
             self.job.cancel.set()
             self.statusBar().showMessage("Annulation demandée")
 
-    def run_analysis(self):
+    def run_analysis(self, callback=None):
         try:
             self.collect_current()
             self.config.validate_ready()
             config = self.config.model_copy(deep=True)
             decisions = {k: v.model_copy(deep=True) for k, v in self.decisions.items()}
+            stamp = decision_stamp(decisions)
 
             def success(result):
-                self.result = result
+                if not self.session.accept(result, stamp):
+                    self.show_error("Les paramètres ont changé pendant l'analyse. Relancez la vérification.")
+                    return
                 self.review_page.load()
                 self.export_page.load()
-                self.statusBar().showMessage(f"Analyse terminée : {result.row_count} lignes examinées")
+                self.update_navigation()
+                if callback:
+                    callback()
 
             self.run_job(lambda cancel, progress: analyze(config, decisions, cancel, progress), success)
         except Exception as exc:
@@ -346,73 +520,43 @@ class MainWindow(QMainWindow):
     def apply_selected(self):
         if not self.result or self.busy:
             return
-        records = self.review_page.selected_records()
-        unique = {r["key"]: r for r in records}
-        if not unique:
-            self.statusBar().showMessage("Sélectionnez les cellules concernées dans le tableau.")
+        records = {r["key"]: r for r in self.review_page.selected_records()}
+        if not records:
             return
         action = self.review_page.action.currentData()
-        if action == "choose" and len(unique) != 1:
-            self.show_error("Choisissez une seule cellule pour sélectionner une interprétation.")
-            return
-        edited = None
-        separator = "/"
-        if action == "edit":
-            edited, accepted = QInputDialog.getText(
-                self, "Valeur de remplacement", f"Nouvelle valeur pour {len(unique)} cellule(s)"
-            )
-            if not accepted:
-                return
-        if action == "all":
-            separator, accepted = QInputDialog.getText(self, "Numéros conservés", "Séparateur", text="/")
-            if not accepted:
-                return
-            if separator not in {"/", ";", ",", " | "}:
-                self.show_error("Choisissez /, ;, une virgule ou ' | ' comme séparateur.")
-                return
         updated = dict(self.decisions)
-        skipped = 0
-        for key, record in unique.items():
-            phones = split_phones(record["current"])
-            spec = next((f for f in self.config.fields if f.code == record["field_code"]), None)
+        for key, record in records.items():
+            from .review import applicable
+
+            if action not in applicable(record):
+                continue
             rule = self.config.rules.get(record["field_code"], FieldRule())
-            value = None
-            if action in {"first", "first_valid", "choose", "all"} and action != "choose":
-                if not spec or spec.role.value != "phone":
-                    skipped += 1
-                    continue
+            spec = next((f for f in self.config.fields if f.code == record["field_code"]), None)
+            phones = split_phones(record["original"])
             if action == "keep":
-                updated[key] = Decision(action="keep", reason="Valeur source conservée par l'utilisateur")
+                updated[key] = Decision(action="keep", reason="Valeur d'origine conservée")
                 continue
             if action == "clear":
-                updated[key] = Decision(action="clear", reason="Cellule vidée par l'utilisateur")
+                updated[key] = Decision(action="clear", reason="Cellule vidée explicitement")
                 continue
             if action == "first":
                 value = phones[0] if phones else None
             elif action == "first_valid":
                 value = next((p for p in phones if valid_phone(p, rule.phone_region)), None)
             elif action == "all":
-                value = separator.join(phones) if phones else None
+                value = self.review_page.separator.currentData().join(phones)
+            elif action == "choose":
+                value = self.review_page.choice.currentData()
+                if len(records) != 1:
+                    self.show_error("Sélectionnez une seule cellule pour choisir une valeur.")
+                    return
             elif action == "edit":
-                value = edited
-            elif action == "proposal":
-                value = record["proposed"]
+                value = self.review_page.edit.text()
             elif action == "truncate":
                 value = display(record["current"])[: spec.max_length] if spec and spec.max_length else None
-            elif action == "choose":
-                choices = record["choices"] or phones
-                labels = [display(c) for c in choices]
-                if not labels:
-                    skipped += 1
-                    continue
-                selected, accepted = QInputDialog.getItem(
-                    self, "Choisir une valeur", "Valeur", labels, editable=False
-                )
-                if not accepted:
-                    return
-                value = choices[labels.index(selected)]
+            else:
+                value = record["proposed"]
             if value is None:
-                skipped += 1
                 continue
             updated[key] = Decision(
                 action="set",
@@ -420,41 +564,42 @@ class MainWindow(QMainWindow):
                 allow_multiple=action == "all",
                 reason=f"Décision utilisateur : {self.review_page.action.currentText()}",
             )
-        if updated != self.decisions:
-            self.history.append({k: v.model_dump(mode="json") for k, v in self.decisions.items()})
-            self.redo_history = []
-            self.decisions = updated
-            self.dirty = True
-            self.run_analysis()
-        elif skipped:
-            self.statusBar().showMessage("Aucune action applicable à la sélection.")
+        if self.session.queue(updated, self.review_page.action.currentText()):
+            self.export_page.published_path = None
+            self.review_page.load()
+            self.export_page.load()
+            self.update_navigation()
 
     def undo_decision(self):
-        if not self.history or self.busy:
-            return
-        self.redo_history.append({k: v.model_dump(mode="json") for k, v in self.decisions.items()})
-        self.decisions = {k: Decision.model_validate(v) for k, v in self.history.pop().items()}
-        self.dirty = True
-        self.run_analysis()
+        if not self.busy and self.session.undo():
+            self.review_page.load()
+            self.export_page.load()
+            self.update_navigation()
 
     def redo_decision(self):
-        if not self.redo_history or self.busy:
-            return
-        self.history.append({k: v.model_dump(mode="json") for k, v in self.decisions.items()})
-        self.decisions = {k: Decision.model_validate(v) for k, v in self.redo_history.pop().items()}
-        self.dirty = True
-        self.run_analysis()
+        if not self.busy and self.session.redo():
+            self.review_page.load()
+            self.export_page.load()
+            self.update_navigation()
 
     def run_export(self):
         try:
-            self.export_page.collect()
-            if self.result is None:
-                raise ValueError("L'analyse doit être exécutée avant l'export.")
+            self.collect_current()
+            if not self.session.current:
+                raise ValueError("Vérifiez les dernières corrections avant de créer le fichier Excel.")
             destination = Path(self.export_page.path.text())
+            if not self.export_page.path.text().strip():
+                raise ValueError("Choisissez le nom et l'emplacement du fichier de sortie.")
+            if self.result.findings and not self.export_page.allow_issues.isChecked():
+                raise ValueError(
+                    "Des problèmes restent signalés. Corrigez-les ou confirmez leur conservation dans le fichier."
+                )
             overwrite = False
             if destination.exists():
-                answer = QMessageBox.question(self, "Fichier existant", f"Remplacer {destination.name} ?")
-                if answer != QMessageBox.StandardButton.Yes:
+                if (
+                    QMessageBox.question(self, "Fichier existant", f"Remplacer {destination.name} ?")
+                    != QMessageBox.StandardButton.Yes
+                ):
                     return
                 overwrite = True
             if self.config.harmonized and self.config.report_collision == "replace":
@@ -471,8 +616,10 @@ class MainWindow(QMainWindow):
             allow = self.export_page.allow_issues.isChecked()
 
             def success(path):
-                self.export_page.output.setText(f"Classeur généré et vérifié :\n{path}")
-                self.statusBar().showMessage("Export terminé")
+                self.export_page.published_path = str(path)
+                self.export_page.output.setText(f"Fichier créé et vérifié : {Path(path).name}")
+                self.export_page.show_open_buttons()
+                self.update_navigation()
 
             self.run_job(
                 lambda cancel, progress: export_excel(
@@ -484,29 +631,67 @@ class MainWindow(QMainWindow):
             self.show_error(exc)
 
     def show_error(self, error):
-        self.statusBar().showMessage(str(error))
-        QMessageBox.warning(self, "FDX Atelier Données", str(error))
+        details = str(error)
+        if isinstance(error, PermissionError):
+            message = "Le fichier est ouvert dans une autre application ou le dossier n'est pas accessible."
+            remedy = "Fermez le fichier dans Excel, ou choisissez un autre emplacement."
+        elif isinstance(error, FileNotFoundError):
+            message = "Le fichier sélectionné n'est plus disponible."
+            remedy = "Choisissez à nouveau son emplacement."
+        elif len(details) > 450 or "validation error" in details.lower():
+            message = "Certains paramètres ne sont pas valides."
+            remedy = "Vérifiez les champs modifiés et les formats attendus."
+        else:
+            message = details
+            remedy = ""
+        box = QMessageBox(self)
+        box.setWindowTitle("Un point à corriger")
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setText(message)
+        if remedy:
+            box.setInformativeText(remedy)
+        box.setDetailedText(f"{type(error).__name__}: {details}")
+        box.exec()
 
-    def new_project(self):
-        if not self.may_discard():
+    def load_demo(self):
+        if self.busy or not self.may_discard():
             return
-        self.config = ProjectConfig()
-        self.decisions, self.history, self.redo_history = {}, [], []
-        self.result, self.metadata, self.project_path = None, None, None
+        self.reset_session()
+        folder = tempfile.mkdtemp(prefix="fdx-exemple-")
+        self._demo_folders.append(folder)
+        source, dictionary = create_demo(folder)
+        self.set_dictionary(dictionary)
+        self.set_source(source)
+
+    def reset_session(self):
+        advanced = self.advanced
+        self.session = SessionController(advanced=advanced)
+        self.metadata, self.project_path = None, None
         self.dictionary_notes = []
         self.step = 0
-        self.dirty = False
+        self.stack.setCurrentIndex(0)
+        self.prepare_page.active = 0
+        with QSignalBlocker(self.prepare_page.tabs):
+            self.prepare_page.tabs.setCurrentIndex(0)
         self.export_page.path.clear()
+        self.export_page.published_path = None
+        self.export_page.output.clear()
         self.import_page.load()
-        self.navigate(0)
+        self.review_page.load()
+        self.update_navigation()
+
+    def new_project(self):
+        if not self.busy and self.may_discard():
+            self.reset_session()
 
     def save_session(self):
-        from PySide6.QtWidgets import QFileDialog
-
+        if self.busy:
+            return False
         try:
             self.collect_current()
             if not self.config.source_path:
-                raise ValueError("Choisissez d'abord un classeur.")
+                raise ValueError("Choisissez d'abord un fichier Excel.")
             path, _ = QFileDialog.getSaveFileName(
                 self, "Enregistrer le projet", self.project_path or "projet.fdxproj", "Projet FDX (*.fdxproj)"
             )
@@ -514,19 +699,24 @@ class MainWindow(QMainWindow):
                 return False
             if not path.lower().endswith(".fdxproj"):
                 path += ".fdxproj"
-            save_project(path, self.config, self.decisions, self.history, self.result)
+            save_project(
+                path,
+                self.config,
+                self.decisions,
+                self.history,
+                self.result if self.session.current else None,
+                ui_state={"advanced": self.advanced, "step": self.step, "audit": self.session.audit},
+            )
             self.project_path = path
             self.dirty = False
-            self.statusBar().showMessage(f"Projet enregistré : {path}")
+            self.statusBar().showMessage("Projet enregistré")
             return True
         except Exception as exc:
             self.show_error(exc)
             return False
 
     def open_session(self):
-        from PySide6.QtWidgets import QFileDialog
-
-        if not self.may_discard():
+        if self.busy or not self.may_discard():
             return
         path, _ = QFileDialog.getOpenFileName(self, "Ouvrir un projet", "", "Projet FDX (*.fdxproj)")
         if not path:
@@ -536,55 +726,57 @@ class MainWindow(QMainWindow):
                 Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation))
                 / "sessions"
             )
-            self.config, self.decisions, self.history = open_project(path, cache)
-            self.step = 0
-            self.stack.setCurrentIndex(0)
-            self.redo_history = []
+            config, decisions, history = open_project(path, cache)
+            state = project_ui_state(path)
+            self.reset_session()
+            self.session = SessionController(
+                config=config,
+                decisions=decisions,
+                history=history,
+                advanced=bool(state.get("advanced", False)),
+                audit=state.get("audit", []),
+            )
+            with QSignalBlocker(self.advanced_toggle):
+                self.advanced_toggle.setChecked(self.advanced)
+            self.prepare_page.set_advanced(self.advanced)
             self.project_path = path
-            self.result = None
-            self.export_page.path.clear()
-            self.export_page.output.clear()
-            self.dirty = False
-            self.refresh_source(lambda: self.navigate(4))
+            self.refresh_source(
+                lambda: self.navigate(
+                    2 if all(m.confirmed for m in self.config.mappings) and self.config.mappings else 1
+                )
+            )
         except Exception as exc:
             self.show_error(exc)
 
     def export_profile(self):
-        from PySide6.QtWidgets import QFileDialog
-
         try:
             self.collect_current()
             path, _ = QFileDialog.getSaveFileName(
-                self, "Enregistrer le profil", "profil.json", "Profil JSON (*.json)"
+                self, "Enregistrer un profil", "profil.json", "Profil JSON (*.json)"
             )
             if path:
-                if not path.lower().endswith(".json"):
-                    path += ".json"
-                save_profile(path, self.config)
+                save_profile(path if path.lower().endswith(".json") else path + ".json", self.config)
                 self.statusBar().showMessage("Profil enregistré")
         except Exception as exc:
             self.show_error(exc)
 
     def import_profile(self):
-        from PySide6.QtWidgets import QFileDialog
-
+        if self.busy:
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Charger un profil", "", "Profil JSON (*.json)")
         if not path:
             return
         try:
             self.collect_current()
             self.config = load_profile(path, self.config)
-            self.decisions = {}
-            self.history, self.redo_history = [], []
+            self.decisions, self.history, self.redo_history = {}, [], []
             self.invalidate()
+            self.prepare_page.active = 0
+            with QSignalBlocker(self.prepare_page.tabs):
+                self.prepare_page.tabs.setCurrentIndex(0)
             self.import_page.load()
-            self.dictionary_page.load()
-            self.mapping_page.load()
-            self.rules_page.load()
             if self.config.source_path:
-                self.refresh_source(lambda: self.navigate(2))
-            else:
-                self.navigate(0)
+                self.refresh_source(lambda: self.navigate(1))
         except Exception as exc:
             self.show_error(exc)
 
@@ -599,17 +791,18 @@ class MainWindow(QMainWindow):
             | QMessageBox.StandardButton.Discard
             | QMessageBox.StandardButton.Cancel,
         )
-        if answer == QMessageBox.StandardButton.Save:
-            return bool(self.save_session())
-        return answer == QMessageBox.StandardButton.Discard
+        return (
+            bool(self.save_session())
+            if answer == QMessageBox.StandardButton.Save
+            else answer == QMessageBox.StandardButton.Discard
+        )
 
     def closeEvent(self, event):
         if self.busy:
             self._closing = True
             self.cancel_job()
             event.ignore()
-            return
-        if self._closing or self.may_discard():
+        elif self._closing or self.may_discard():
             event.accept()
         else:
             event.ignore()
@@ -619,8 +812,7 @@ def launch():
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("FDX Atelier Données")
     app.setOrganizationName("FDX")
-    app.setStyle("Fusion")
-    app.setStyleSheet(STYLE)
+    apply_theme(app)
     translator = QTranslator(app)
     if translator.load("qtbase_fr", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
         app.installTranslator(translator)
