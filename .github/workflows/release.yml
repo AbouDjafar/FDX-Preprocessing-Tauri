@@ -1,0 +1,115 @@
+name: Publier une release Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag de version deja pousse (ex. v1.1.0)
+        required: true
+        default: v1.1.0
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - name: Installer et tester la version etiquetee
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Tag de version invalide' }
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m pip install -e . --no-build-isolation
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m ruff check src tests scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m pytest -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Construire et verifier les binaires
+        shell: pwsh
+        run: |
+          $compiler = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $compiler) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $compiler = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' | Select-Object -First 1
+          }
+          .\scripts\build_windows.ps1 -SkipTests -ISCC $compiler.FullName
+          .\scripts\verify_windows.ps1 -TestInstaller
+      - name: Publier les fichiers verifies
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:RELEASE_TAG
+          $version = $tag.Substring(1)
+          $installer = "dist/FDXAtelier-Installation-$version.exe"
+          $portable = "dist/FDXAtelier-Portable-$version.zip"
+          if (-not (Test-Path -LiteralPath $installer)) { throw 'Version du tag et du binaire differente' }
+          Compress-Archive -LiteralPath dist/FDXAtelier.dist -DestinationPath $portable -CompressionLevel Optimal
+          $files = @($installer, $portable)
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            $hash + '  ' + (Split-Path -Leaf $file)
+          }
+          $lines | Set-Content -LiteralPath dist/SHA256SUMS.txt -Encoding ascii
+          $base = "repos/$env:GITHUB_REPOSITORY/releases"
+          $releases = gh api "${base}?per_page=100" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Lecture des releases impossible' }
+          $matching = @($releases | Where-Object tag_name -eq $tag)
+          if ($matching.Count -gt 1) { throw 'Plusieurs releases portent ce tag' }
+          if ($matching.Count -eq 1) {
+            $release = $matching[0]
+            if (-not $release.draft) { throw 'Release deja publique : aucun remplacement autorise' }
+          } else {
+            $payload = @{
+              tag_name = $tag
+              target_commitish = (git rev-parse HEAD)
+              name = "FDX Atelier Donnees $tag"
+              body = (Get-Content -LiteralPath "docs/RELEASE-$version.md" -Raw -Encoding utf8)
+              draft = $true
+              prerelease = $false
+            } | ConvertTo-Json
+            $release = $payload | gh api --method POST $base --input - | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Creation du brouillon impossible' }
+          }
+          gh release upload $tag $installer $portable dist/SHA256SUMS.txt --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Transfert incomplet : release laissee en brouillon' }
+          $uploaded = gh api "$base/$($release.id)" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Controle des fichiers transferes impossible' }
+          foreach ($file in $files) {
+            $name = Split-Path -Leaf $file
+            $asset = @($uploaded.assets | Where-Object name -eq $name)
+            $hash = 'sha256:' + (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($asset.Count -ne 1 -or $asset[0].size -ne (Get-Item -LiteralPath $file).Length -or $asset[0].digest -ne $hash) {
+              throw "Verification du transfert impossible : $name"
+            }
+          }
+          gh api --method PATCH "$base/$($release.id)" -F draft=false --silent
+          if ($LASTEXITCODE -ne 0) { throw 'Publication impossible : brouillon conserve' }
+          Write-Output "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$tag"
