@@ -226,7 +226,7 @@ class ImportPage(QWidget):
             self.app.config.mappings = []
             self.app.invalidate()
         self.summary.setText(
-            f"{sheet['rows'] - self.header.value():,} lignes de données    ·    "
+            f"{max(0, sheet['rows'] - self.header.value()):,} lignes de données    ·    "
             f"{sheet['columns']} colonnes".replace(",", " ")
         )
         self.preview.clear()

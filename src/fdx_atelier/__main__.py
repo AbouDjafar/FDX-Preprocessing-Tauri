@@ -77,6 +77,19 @@ def main(argv=None):
         )
         return 0
     except Exception as exc:
+        if args.command == "selftest":
+            import traceback
+
+            report = Path(args.output)
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(
+                json.dumps(
+                    {"ok": False, "error": str(exc), "traceback": traceback.format_exc()},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
         print(f"Erreur : {exc}", file=sys.stderr)
         return 1
 

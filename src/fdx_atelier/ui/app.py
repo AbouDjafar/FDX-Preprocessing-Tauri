@@ -283,13 +283,21 @@ class MainWindow(QMainWindow):
             m.confirmed for m in self.config.mappings if m.field_code
         )
         text = [
-            "Confirmer mes fichiers",
+            "Définir les colonnes attendues"
+            if self.config.dictionary_path and not self.config.fields
+            else "Confirmer mes fichiers",
             "Analyser le fichier" if confirmed else "Confirmer les colonnes",
             "Choisir le fichier de sortie" if self.session.current else "Vérifier mes corrections",
             "Ouvrir mon fichier" if self.export_page.published_path else "Créer mon fichier Excel",
         ][self.step]
         self.next_button.setText(text)
-        ready = bool(self.config.source_path and self.config.fields and self.metadata)
+        info = self.sheet_info() or {}
+        ready = bool(
+            self.config.source_path
+            and (self.config.fields or self.config.dictionary_path)
+            and self.metadata
+            and info.get("rows", 0) > self.config.header_row
+        )
         self.next_button.setEnabled(not self.busy and (self.step != 0 or ready))
         if self.step == 3:
             self.next_button.setEnabled(not self.busy and self.session.current)
@@ -334,7 +342,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self.collect_current()
-            if index > 0 and (not self.metadata or not self.config.fields):
+            if index > 0 and (not self.metadata or not (self.config.fields or self.config.dictionary_path)):
                 raise ValueError("Choisissez le fichier Excel et son dictionnaire avant de continuer.")
             if index >= 2:
                 self.config.validate_ready()
@@ -357,6 +365,9 @@ class MainWindow(QMainWindow):
             self.collect_current()
             if self.step == 0:
                 self.navigate(1)
+                if not self.config.fields:
+                    self.advanced_toggle.setChecked(True)
+                    self.prepare_page.tabs.setCurrentIndex(2)
             elif self.step == 1:
                 if not self.config.mappings or any(
                     not m.confirmed for m in self.config.mappings if m.field_code
@@ -393,10 +404,6 @@ class MainWindow(QMainWindow):
     def set_dictionary(self, path):
         try:
             parsed = parse_dictionary(read_text(path))
-            if not parsed.fields:
-                raise ValueError(
-                    "Aucun champ reconnu dans ce dictionnaire. Choisissez un tableau .md ou .txt contenant les colonnes attendues."
-                )
             self.config.dictionary_path = str(Path(path).resolve())
             self.config.fields = parsed.fields
             self.config.mappings = []
@@ -480,7 +487,10 @@ class MainWindow(QMainWindow):
                 else:
                     self.show_error(pending["error"])
             elif "result" in pending:
-                success(pending["result"])
+                try:
+                    success(pending["result"])
+                except Exception as exc:
+                    self.show_error(exc)
 
         job.finished.connect(finished)
         job.start()

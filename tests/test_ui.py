@@ -306,3 +306,29 @@ def test_empty_search_and_category_reset(window, project, qtbot):
     window.review_page.search.setText("aucun resultat")
     assert window.review_page.current_record() is None
     assert not window.review_page.apply.isEnabled()
+
+
+def test_unrecognized_dictionary_can_be_completed(window, project, qtbot, tmp_path):
+    note = tmp_path / "regles.txt"
+    note.write_text("Conserver les informations non reconnues.", encoding="utf-8")
+    window.set_dictionary(note)
+    window.set_source(project.source_path)
+    qtbot.waitUntil(lambda: not window.busy, timeout=30000)
+    assert window.next_button.isEnabled()
+    window.next_action()
+    assert window.step == 1
+    assert window.advanced
+    assert window.prepare_page.tabs.currentIndex() == 2
+    window.dictionary_page.add()
+    window.dictionary_page.collect()
+    assert len(window.config.fields) == 1
+    assert not window.errors
+
+
+def test_header_past_last_row_blocks_continue(window, project, qtbot):
+    ready(window, project, qtbot)
+    window.navigate(0)
+    window.import_page.header.setValue(20)
+    qtbot.waitUntil(lambda: not window.busy, timeout=30000)
+    assert not window.next_button.isEnabled()
+    assert window.import_page.preview.rowCount() == 0
