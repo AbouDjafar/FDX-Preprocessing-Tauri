@@ -1,5 +1,11 @@
 # Repository Instructions
 
+## Project Context
+
+- Read `docs/TRANSMISSION.md` for the compact business and technical handover.
+  Then inspect only the relevant modules and tests rather than rereading the
+  whole repository. Keep this handover free of personal paths and private data.
+
 ## Build and Delivery
 
 - Prefer GitHub Actions for Windows compilation, packaging, release publication,
