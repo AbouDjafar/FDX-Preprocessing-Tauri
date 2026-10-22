@@ -1,0 +1,9 @@
+openpyxl==3.1.5
+pydantic==2.12.3
+pandera[pandas]==0.26.1
+rapidfuzz==3.14.1
+phonenumbers==9.0.17
+defusedxml==0.7.1
+pytest==8.4.2
+hypothesis==6.142.2
+selenium==4.37.0

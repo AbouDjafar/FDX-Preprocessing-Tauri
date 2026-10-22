@@ -1,0 +1,10 @@
+[package]
+name = "fdx-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+fdx-core = { path = "../fdx-core" }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+tempfile = "3"
