@@ -1,20 +1,11 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
-
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '@': path.resolve(rootDir, 'src'),
-    },
-    dedupe: ['react', 'react-dom'],
-  },
-  server: {
-    host: '0.0.0.0',
-  },
+  base: './',
+  plugins: [react()],
+  resolve: { dedupe: ['react', 'react-dom'] },
+  server: { host: '127.0.0.1', port: 1420, strictPort: true },
+  build: { target: 'es2022' },
+  test: { include: ['tests/**/*.test.ts'], environment: 'node', clearMocks: true },
 });

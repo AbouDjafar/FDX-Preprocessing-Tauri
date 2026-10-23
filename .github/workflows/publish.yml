@@ -1,0 +1,26 @@
+name: Publish a verified Windows build
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Windows Tauri workflow run ID
+        required: true
+      tag:
+        description: Release tag pointing to the exact verified commit
+        default: v2.0.0
+        required: true
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate provenance and download verified build on runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          TAG: ${{ inputs.tag }}
+        run: python scripts/promote_tauri.py

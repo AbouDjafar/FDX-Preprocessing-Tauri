@@ -21,6 +21,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Format
+        id: formatting
+        continue-on-error: true
         run: cargo fmt --all -- --check
       - name: Core and CLI tests
         run: cargo test --locked -p fdx-core -p fdx-cli
@@ -40,6 +42,9 @@ jobs:
           pip install -r scripts/oracle-requirements.txt
           pytest -q tests/test_dictionary_transforms.py tests/test_engine_export.py tests/test_regressions.py tests/test_storage.py
           python scripts/compare_engines.py target/debug/fdx-cli
+      - name: Enforce formatting
+        if: steps.formatting.outcome != 'success'
+        run: exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

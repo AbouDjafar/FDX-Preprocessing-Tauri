@@ -260,25 +260,26 @@ impl AppState {
     }
 }
 
-fn results(session: &Session, p: &Value) -> Result<Value> {
+fn page<T: serde::Serialize>(items: &[T], p: &Value, kind_of: impl Fn(&T) -> &str, position: impl Fn(&T) -> (u32,u32)) -> Result<Value> {
     let offset = p.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
     let limit = p.get("limit").and_then(Value::as_u64).unwrap_or(100).clamp(1,500) as usize;
     let query = p.get("query").and_then(Value::as_str).unwrap_or("").to_lowercase();
     let kind = p.get("kind").and_then(Value::as_str).unwrap_or("");
-    let view = p.get("view").and_then(Value::as_str).unwrap_or("findings");
-    let result = session.result.as_ref();
-    let items: Vec<Value> = match view {
-        "history" => session.history.clone(),
-        "changes" => result.map(|r| r.changes.iter().map(|v| serde_json::to_value(v).unwrap_or(Value::Null)).collect()).unwrap_or_default(),
-        "findings" => result.map(|r| r.findings.iter().map(|v| serde_json::to_value(v).unwrap_or(Value::Null)).collect()).unwrap_or_default(),
-        _ => return Err(error("Vue de resultat inconnue.")),
-    };
-    let mut items: Vec<Value> = items.into_iter().filter(|v| (kind.is_empty() || v.get("kind").and_then(Value::as_str) == Some(kind)) && (query.is_empty() || v.to_string().to_lowercase().contains(&query))).collect();
-    if p.get("sort").and_then(Value::as_str) == Some("kind") { items.sort_by_key(|v| v.get("kind").and_then(Value::as_str).unwrap_or("").to_owned()); }
-    else if view != "history" { items.sort_by_key(|v| (v.get("row").and_then(Value::as_u64).unwrap_or(0),v.get("column").and_then(Value::as_u64).unwrap_or(0))); }
+    let mut items: Vec<&T> = items.iter().filter(|v| (kind.is_empty() || kind_of(v) == kind) && (query.is_empty() || serde_json::to_string(v).unwrap_or_default().to_lowercase().contains(&query))).collect();
+    if p.get("sort").and_then(Value::as_str) == Some("kind") { items.sort_by(|a,b| kind_of(a).cmp(kind_of(b))); }
+    else { items.sort_by_key(|v| position(v)); }
     if flag(p,"descending") { items.reverse(); }
     let total = items.len();
     Ok(json!({"items":items.into_iter().skip(offset).take(limit).collect::<Vec<_>>(),"total":total}))
+}
+
+fn results(session: &Session, p: &Value) -> Result<Value> {
+    match p.get("view").and_then(Value::as_str).unwrap_or("findings") {
+        "history" => page(&session.history,p, |_| "", |_| (0,0)),
+        "changes" => page(session.result.as_ref().map(|r| r.changes.as_slice()).unwrap_or(&[]),p, |_| "", |c| (c.row,c.column)),
+        "findings" => page(session.result.as_ref().map(|r| r.findings.as_slice()).unwrap_or(&[]),p, |f| f.kind.as_str(), |f| (f.row,f.column)),
+        _ => Err(error("Vue de resultat inconnue.")),
+    }
 }
 
 #[cfg(test)]

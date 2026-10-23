@@ -65,43 +65,43 @@ impl NumberParser {
     }
 
     pub(crate) fn parse(&self, value: &CellValue, integer: bool) -> Result<BigDecimal> {
-    let number = if value.is_numeric() {
-        decimal(&value.value)?
-    } else if value.kind == "text" {
-        let mut text = grouping_spaces(value.value.trim());
-        // Currency markers may surround a number, never join two digit runs.
-        for re in &self.currency {
-            text = re.replace_all(&text, "").trim().to_owned();
-        }
-        if let Some(grouped) = &self.grouping {
-            if text.contains(&self.thousands) {
-                if !grouped.is_match(&text) {
-                    return Err(error("Groupement des milliers ambigu ou irregulier."));
-                }
-                text = text.replace(&self.thousands, "");
+        let number = if value.is_numeric() {
+            decimal(&value.value)?
+        } else if value.kind == "text" {
+            let mut text = grouping_spaces(value.value.trim());
+            // Currency markers may surround a number, never join two digit runs.
+            for re in &self.currency {
+                text = re.replace_all(&text, "").trim().to_owned();
             }
+            if let Some(grouped) = &self.grouping {
+                if text.contains(&self.thousands) {
+                    if !grouped.is_match(&text) {
+                        return Err(error("Groupement des milliers ambigu ou irregulier."));
+                    }
+                    text = text.replace(&self.thousands, "");
+                }
+            }
+            if self.separator != "." {
+                if text.contains('.') { return Err(error("Point inattendu avec le separateur decimal choisi.")); }
+                text = text.replace(&self.separator, ".");
+            }
+            // Exponential notation is only accepted for already numeric source cells.
+            static PLAIN: OnceLock<Regex> = OnceLock::new();
+            if !PLAIN.get_or_init(|| Regex::new(r"^[+-]?[0-9]+(?:\.[0-9]+)?$").expect("constant plain number regex")).is_match(&text) {
+                return Err(error("Valeur non numerique avec les separateurs choisis."));
+            }
+            decimal(&text)?
+        } else {
+            return Err(error("Stockage numerique attendu ; un booleen ou une date n'est pas un montant."));
+        };
+        if integer && !number.is_integer() {
+            return Err(error("Un entier est attendu ; aucun arrondi n'a ete applique."));
         }
-        if self.separator != "." {
-            if text.contains('.') { return Err(error("Point inattendu avec le separateur decimal choisi.")); }
-            text = text.replace(&self.separator, ".");
+        let (coefficient, _) = number.normalized().as_bigint_and_exponent();
+        if coefficient.to_string().trim_start_matches('-').len() > 15 {
+            return Err(error("Plus de 15 chiffres significatifs : choisir un stockage texte pour Excel."));
         }
-        // Exponential notation is only accepted for already numeric source cells.
-        static PLAIN: OnceLock<Regex> = OnceLock::new();
-        if !PLAIN.get_or_init(|| Regex::new(r"^[+-]?[0-9]+(?:\.[0-9]+)?$").expect("constant plain number regex")).is_match(&text) {
-            return Err(error("Valeur non numerique avec les separateurs choisis."));
-        }
-        decimal(&text)?
-    } else {
-        return Err(error("Stockage numerique attendu ; un booleen ou une date n'est pas un montant."));
-    };
-    if integer && !number.is_integer() {
-        return Err(error("Un entier est attendu ; aucun arrondi n'a ete applique."));
-    }
-    let (coefficient, _) = number.normalized().as_bigint_and_exponent();
-    if coefficient.to_string().trim_start_matches('-').len() > 15 {
-        return Err(error("Plus de 15 chiffres significatifs : choisir un stockage texte pour Excel."));
-    }
-    Ok(number)
+        Ok(number)
     }
 }
 
@@ -291,7 +291,7 @@ pub fn segment_company(value: &str) -> BTreeMap<String, Option<String>> {
     let phone = tel.map(|m| split_phones(&raw[m.end()..]).join("/"));
     static BP: OnceLock<Regex> = OnceLock::new();
     static POSTAL: OnceLock<Regex> = OnceLock::new();
-    let bp_re = BP.get_or_init(|| Regex::new(r"(?i)\b(?:B\.?\s*P\.?|bo[i\x{ee}]te\s+postale)\s*[:.]?\s*").expect("constant BP regex"));
+    let bp_re = BP.get_or_init(|| Regex::new(r"(?i)\b(?:B\.?\s*P\b\.?|bo[i\x{ee}]te\s+postale\b)\s*[:.]?\s*").expect("constant BP regex"));
     let postal = POSTAL.get_or_init(|| Regex::new(r"^([0-9][0-9 ]*)(.*)$").expect("constant postal regex"));
     let mut name = head.to_owned();
     let mut bp = None;

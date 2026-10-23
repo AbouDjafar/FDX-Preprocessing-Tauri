@@ -38,7 +38,7 @@ export interface Summary { row_count: number; column_count: number; findings: nu
 export interface Session {
   id: string; name: string; family: string; revision: number; config: ProjectConfig;
   workbook: WorkbookInfo | null; notes: string[]; summary: Summary | null; dirty: boolean;
-  pending_decisions: number; can_undo: boolean; can_redo: boolean; export_path: string | null; project_path: string | null;
+  pending_decisions: number; can_undo: boolean; can_redo: boolean; export_path: string | null; project_path: string | null; ui_state?: unknown;
 }
 export interface RecentProject { id: string; name: string; family: string; updated: string; path: string; status: string }
 export interface Progress { task_id: string; phase: string; current: number; total: number | null; message: string }
@@ -76,6 +76,10 @@ export const newField = (): FieldSpec => ({ code: '', label: '', dtype: 'text', 
 export const defaultRule = (): FieldRule => ({ normalize_spaces: true, convert: true, decimal_separator: ',', thousands_separator: ' ', currency_tokens: ['FCFA', 'XAF'], date_order: 'dmy', phone_region: 'CM', phone_policy: 'report', phone_separator: '/', length_policy: 'report', invalid_policy: 'report', replacements: {} });
 export const defaultConfig = (): ProjectConfig => ({ version: 2, source_path: '', original_path: '', dictionary_path: '', sheet: '', header_row: 1, fields: [], mappings: [], rules: {}, chronology: [], segmentation: { enabled: false, source_column: 1, name_column: null, bp_column: null, phone_column: null, location_column: null, overwrite: false }, harmonized: true, report_collision: 'suffix', reports: ['control', 'original', 'verify'] });
 export const filename = (path: string) => path.split(/[\\/]/).pop() || path;
+export function analysisConfig(config: ProjectConfig): string {
+  const { harmonized: _harmonized, reports: _reports, report_collision: _collision, ...analysis } = config;
+  return JSON.stringify(analysis);
+}
 export function columnName(position: number): string {
   let label = '';
   for (let n = position; n > 0; n = Math.floor((n - 1) / 26)) label = String.fromCharCode(65 + (n - 1) % 26) + label;

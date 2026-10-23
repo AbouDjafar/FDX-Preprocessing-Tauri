@@ -20,10 +20,10 @@ export function ReviewStage({ next }: { next: () => void }) {
   const [lastSummary, setLastSummary] = useState(session.summary);
   const scroll = useRef<HTMLDivElement>(null); const epoch = useRef(0);
   const virtualizer = useVirtualizer({ count: page.items.length, getScrollElement: () => scroll.current, estimateSize: () => view === 'findings' ? 190 : 116, overscan: 5 });
-  const current = !!session.summary && !w.edited;
+  const current = !!session.summary && !session.dirty && !w.edited;
   const canRead = view === 'history' || !!session.summary || session.pending_decisions > 0;
   useEffect(() => { const timer = setTimeout(() => { setSearch(query); setOffset(0); }, 250); return () => clearTimeout(timer); }, [query]);
-  useEffect(() => { if (session.summary) { setLastSummary(session.summary); setQueued(new Set()); } }, [session.summary]);
+  useEffect(() => { if (session.summary) setLastSummary(session.summary); if (!session.dirty) setQueued(new Set()); }, [session.summary, session.dirty]);
   useEffect(() => {
     const request = ++epoch.current;
     setSelected(new Set()); setFailed(false);

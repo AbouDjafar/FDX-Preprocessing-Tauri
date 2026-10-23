@@ -1,4 +1,4 @@
-import { cell, configIssues, defaultConfig, defaultRule, emptyCell, newField, readOps, type CellChange, type Decisions, type FieldSpec, type Finding, type HistoryEntry, type Op, type Operations, type Progress, type ProjectConfig, type RecentProject, type Request, type Session, type WorkbookInfo } from '../model';
+import { analysisConfig, cell, configIssues, defaultConfig, emptyCell, newField, readOps, type CellChange, type Decisions, type FieldSpec, type Finding, type HistoryEntry, type Op, type Operations, type Progress, type ProjectConfig, type RecentProject, type Request, type Session, type WorkbookInfo } from '../model';
 import type { Adapter } from './bridge';
 
 export const DEMO_SOURCE = '/DEMO/donnees-synthetiques/marches-fictifs.xlsx';
@@ -125,7 +125,7 @@ export class DemoAdapter implements Adapter {
         if (dictionary_path) this.assertFixture(dictionary_path);
         if (!demoWorkbook().sheets.some(v => v.name === sheet)) fail('SHEET_MISSING', 'Confirmez une feuille du classeur fictif.');
         s.session.config = { ...fixtureConfig(), sheet: sheet!, header_row };
-        s.session.workbook = demoWorkbook(); s.decisions = {}; s.undo = []; s.redo = []; s.findings = []; s.changes = []; s.session.pending_decisions = 0;
+        s.session.workbook = demoWorkbook(); s.decisions = {}; s.undo = []; s.redo = []; s.findings = []; s.changes = []; s.session.pending_decisions = 0; s.session.summary = null;
         s.session.notes = ['DEMO : seules les données synthétiques intégrées sont utilisées.']; break;
       }
       case 'dictionary': {
@@ -180,15 +180,17 @@ export class DemoAdapter implements Adapter {
       }
       case 'project_save': {
         const { path } = p as Operations['project_save']['payload']; this.assertFixture(path);
-        s.session.project_path = path; s.session.dirty = false;
+        s.session.project_path = path;
         this.projects.set(path, copy(s)); this.states.set(s.session.id, s); return { path };
       }
       case 'export': return fail('DEMO_ONLY', 'Aucun export Excel réel dans le navigateur. Utilisez l’application de bureau.');
       case 'open_path': return fail('DEMO_ONLY', 'Les chemins DEMO sont synthétiques et ne correspondent à aucun fichier local.');
       default: return fail('UNKNOWN_OPERATION', 'Opération inconnue.');
     }
-    if (req.op !== 'analyze') s.session.summary = null;
-    s.session.revision++; s.session.dirty = true; s.session.export_path = null;
+    const outputOnly = req.op === 'configure' && analysisConfig(s.session.config) === analysisConfig(previous!.session.config);
+    if (req.op === 'analyze') s.session.dirty = false;
+    else if (!outputOnly) s.session.dirty = true;
+    s.session.revision++; s.session.export_path = null;
     s.session.can_undo = !!s.undo.length; s.session.can_redo = !!s.redo.length;
     if (req.op !== 'decide') s.history.push({ at: new Date().toISOString(), op: req.op, revision: s.session.revision });
     this.states.set(s.session.id, s);
