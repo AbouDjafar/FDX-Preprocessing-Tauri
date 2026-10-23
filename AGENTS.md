@@ -2,14 +2,17 @@
 
 ## Project Context
 
-- Read `docs/TRANSMISSION.md` for the compact business and technical handover.
+- Read `docs/TRANSMISSION-TAURI.md` for the current compact handover, then
+  `docs/TAURI-CONTRACT.md` for interfaces. `docs/TRANSMISSION.md` describes the
+  retained Python reference, not the current application architecture.
   Then inspect only the relevant modules and tests rather than rereading the
   whole repository. Keep this handover free of personal paths and private data.
 
 ## Build and Delivery
 
-- Prefer GitHub Actions for Windows compilation, packaging, release publication,
-  and other expensive tasks that can safely run on GitHub's servers.
+- Use GitHub Actions for ALL dependency installation, compilation, packaging,
+  executable testing and release publication. Do not install Node/Rust/Python
+  dependencies or run local builds. Inspect the interface through GitHub Pages.
 - Commit sources and small required assets only. Never commit executables,
   installers, distribution archives, build directories, or large binary files.
 - Publish verified binaries as GitHub Release assets, not in Git history.

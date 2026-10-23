@@ -28,6 +28,8 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Install frontend dependencies on runner
         run: npm ci
         working-directory: web
@@ -43,7 +45,11 @@ jobs:
       - name: Build assets and install CI-only oracle
         run: |
           python scripts/tauri_icon.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           pip install -r scripts/oracle-requirements.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/tauri_notices.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Rust Windows tests and lint
         run: |
           cargo test --locked --workspace

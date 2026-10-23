@@ -45,3 +45,6 @@ jobs:
           cargo --version
           node --version
           npm --version
+      - name: Dependency security report
+        continue-on-error: true
+        run: npm --prefix web audit

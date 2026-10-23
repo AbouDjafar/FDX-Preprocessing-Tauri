@@ -4,7 +4,6 @@
   "version": "2.0.0",
   "identifier": "com.fdx.atelier.tauri",
   "build": {
-    "beforeBuildCommand": "npm --prefix ../web run build",
     "frontendDist": "../web/dist"
   },
   "app": {
@@ -16,6 +15,7 @@
     "targets": ["nsis"],
     "shortDescription": "Preparation locale de classeurs metier",
     "category": "Productivity",
+    "resources": {"../qa/portable/licenses/": "licenses/", "../docs/GUIDE-TAURI.md": "GUIDE-TAURI.md"},
     "icon": ["icons/32x32.png","icons/128x128.png","icons/icon.ico"],
     "windows": {"webviewInstallMode":{"type":"embedBootstrapper"},"nsis":{"languages":["French"],"displayLanguageSelector":false,"installMode":"currentUser"}}
   }

@@ -1,10 +1,12 @@
-# FDX Atelier Données
+# FDX Atelier Tauri
 
 **Préparation et contrôle de données Excel pour le suivi métier des marchés publics.**
 
-FDX Atelier Données est une application Windows en français destinée aux équipes qui préparent des données administratives pour le contrôle de gestion, le reporting et l'analyse des marchés publics. Elle harmonise les fichiers selon un dictionnaire de données validé et conserve les anomalies qui nécessitent une décision humaine.
+FDX Atelier Tauri est une application Windows en français destinée aux équipes qui préparent des données administratives pour le contrôle de gestion, le reporting et l'analyse des marchés publics. Elle harmonise les fichiers selon un dictionnaire de données validé et conserve les anomalies qui nécessitent une décision humaine. Cette version utilise React et un moteur Rust local, sans Python embarqué.
 
-[Télécharger une version](https://github.com/AbouDjafar/FDX-Preprocessing/releases) · [Guide utilisateur](docs/GUIDE.md) · [Transmission du projet](docs/TRANSMISSION.md)
+[Versions vérifiées](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases) · [Aperçu de l'interface](https://aboudjafar.github.io/FDX-Preprocessing-Tauri/) · [Guide utilisateur](docs/GUIDE-TAURI.md) · [Transmission](docs/TRANSMISSION-TAURI.md)
+
+**État : migration 2.0.0 en validation.** Une compilation réussie ne suffit pas à constituer une version finale : les contrôles métier, de conservation Excel et Windows doivent passer avant publication d'une release stable. L'aperçu Pages utilise des données fictives et ne traite aucun fichier personnel.
 
 ## Finalité métier
 
@@ -23,20 +25,21 @@ Les règles dépendent du dictionnaire et du processus de l'organisation utilisa
 
 ## Démarrer
 
-Windows x64. L'exécutable ne nécessite ni Python ni Microsoft Excel.
+Windows x64 avec WebView2. L'exécutable ne nécessite ni Python, ni Node, ni Rust, ni Microsoft Excel. L'ancienne application et cette version peuvent coexister.
 
-1. Télécharger manuellement l'installateur ou l'archive portable depuis les [releases](https://github.com/AbouDjafar/FDX-Preprocessing/releases). Pour la version portable, extraire l'ensemble de l'archive et conserver le dossier `_internal` avec l'exécutable.
+1. Télécharger manuellement l'installateur ou l'archive portable lorsqu'une [release vérifiée](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases) est disponible. Le portable utilise WebView2 déjà installé ; l'installateur vérifie sa présence et peut nécessiter Internet si ce composant manque.
 2. Lancer l'application et choisir **Essayer un exemple** pour découvrir le fonctionnement sur des données fictives.
-3. Pour un traitement métier, sélectionner un classeur `.xlsx` et son dictionnaire `.md` ou `.txt`, puis suivre les quatre étapes.
+3. Pour un traitement métier, sélectionner un classeur `.xlsx` et son dictionnaire `.md` ou `.txt`, puis suivre les cinq étapes.
 
 | Étape | Décision attendue |
 |---|---|
-| Mes fichiers | Confirmer la feuille contenant les données et la ligne d'en-tête. |
-| Préparer | Valider les associations de colonnes, les formats et les règles applicables. |
+| Importer | Confirmer la feuille contenant les données et la ligne d'en-tête. |
+| Associer | Valider le dictionnaire et les correspondances de colonnes. |
+| Traiter | Choisir les formats, règles et décisions applicables. |
 | Vérifier | Examiner les anomalies, préparer les corrections et vérifier le résultat. |
-| Enregistrer | Choisir le nom et l'emplacement du fichier final, puis confirmer l'export. |
+| Exporter | Choisir le nom et l'emplacement du fichier final, puis confirmer l'export. |
 
-Les procédures détaillées figurent dans le [guide utilisateur](docs/GUIDE.md).
+Les procédures détaillées figurent dans le [guide utilisateur](docs/GUIDE-TAURI.md).
 
 ## Données et confidentialité
 
@@ -55,12 +58,12 @@ La version actuelle traite un fichier et une feuille de données à la fois, jus
 
 ## Développement et livraison
 
-Le moteur Python est séparé de l'interface. Les dépendances et versions de référence sont décrites dans [pyproject.toml](pyproject.toml) et [requirements-lock.txt](requirements-lock.txt).
+Le moteur Rust indépendant se trouve dans `crates/fdx-core`, la CLI dans `crates/fdx-cli`, l'hôte natif dans `src-tauri` et le frontend dans `web`. Les dépendances sont verrouillées par `Cargo.lock` et `web/package-lock.json`. Le code Python historique reste uniquement une référence de comparaison pour les tests ; il n'est pas livré dans l'application Tauri.
 
-Les tests complets et compilations Windows passent prioritairement par [GitHub Actions](https://github.com/AbouDjafar/FDX-Preprocessing/actions). Les exécutables et installateurs sont distribués dans les releases, jamais dans l'historique Git. Les composants tiers et leurs licences accompagnent la distribution.
+Les installations de dépendances, tests complets, compilations et conditionnements passent exclusivement par [GitHub Actions](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions). Les exécutables et installateurs sont distribués dans les releases, jamais dans l'historique Git. La publication réutilise un artefact vérifié au même commit, sans recompilation.
 
-Pour reprendre le développement, lire les [instructions du dépôt](AGENTS.md), puis le [document de transmission](docs/TRANSMISSION.md), qui décrit les règles métier, contrats techniques, limites et vérifications à préserver.
+Pour reprendre le développement, lire les [instructions du dépôt](AGENTS.md), puis la [transmission Tauri](docs/TRANSMISSION-TAURI.md). Le [mémo historique](docs/TRANSMISSION.md) décrit les règles métier d'origine et la version Python, pas l'architecture actuelle. Ce dépôt dérive de [FDX-Preprocessing](https://github.com/AbouDjafar/FDX-Preprocessing) et conserve son historique.
 
 ## Signaler un problème
 
-Utiliser les [issues du dépôt](https://github.com/AbouDjafar/FDX-Preprocessing/issues) en indiquant la version, les étapes de reproduction et le résultat attendu. Joindre uniquement un exemple fictif ou anonymisé ; retirer des captures les informations personnelles, chemins locaux et données confidentielles.
+Utiliser les [issues du dépôt](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/issues) en indiquant la version, les étapes de reproduction et le résultat attendu. Joindre uniquement un exemple fictif ou anonymisé ; retirer des captures les informations personnelles, chemins locaux et données confidentielles.
