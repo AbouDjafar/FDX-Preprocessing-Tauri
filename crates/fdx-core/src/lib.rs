@@ -1,5 +1,5 @@
-pub mod dictionary;
 pub mod demo;
+pub mod dictionary;
 pub mod engine;
 pub mod exporter;
 pub mod models;
