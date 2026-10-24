@@ -6,70 +6,12 @@ use std::{collections::BTreeMap, fs::{self, OpenOptions}, io::Write, path::Path}
 
 const MAX_JSON: u64 = 32 * 1024 * 1024;
 const MAX_DATABASE: u64 = 1024 * 1024 * 1024;
-const RAW_NUMBER: &str = "$fdx_raw_json_number";
 
-// serde_json's default Value converts non-integer JSON numbers through f64.
-// Quote number tokens before deserialization, then interpret only the numeric
-// properties allowed by each schema. Strings and JSON structure still go through
-// serde_json; the reserved key is rejected in input to prevent marker spoofing.
+// Requires serde_json's arbitrary_precision feature: Number retains the original
+// decimal representation, including legacy decisions and untyped history values.
 fn exact_json(bytes: &[u8]) -> Result<Value> {
     if bytes.len() as u64 > MAX_JSON { return Err(error("Donnees JSON trop volumineuses.")); }
-    let input = std::str::from_utf8(bytes).map_err(|_| error("Le document JSON doit etre UTF-8."))?;
-    let mut output = String::with_capacity(input.len());
-    let mut offset = 0;
-    while offset < bytes.len() {
-        let start = offset;
-        match bytes[offset] {
-            b'"' => {
-                offset += 1;
-                let mut closed = false;
-                while offset < bytes.len() {
-                    if bytes[offset] == b'\\' { offset = (offset + 2).min(bytes.len()); }
-                    else if bytes[offset] == b'"' { offset += 1; closed = true; break; }
-                    else { offset += 1; }
-                }
-                if !closed { return Err(error("Chaine JSON tronquee.")); }
-                let string: String = serde_json::from_str(&input[start..offset])?;
-                if string == RAW_NUMBER { return Err(error("Propriete JSON reservee.")); }
-                output.push_str(&input[start..offset]);
-            },
-            b'-' | b'0'..=b'9' => {
-                offset += 1;
-                while offset < bytes.len() && matches!(bytes[offset], b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-') { offset += 1; }
-                let token = &input[start..offset];
-                serde_json::from_str::<serde::de::IgnoredAny>(token)?;
-                number(token)?;
-                output.push_str(&format!("{{\"{RAW_NUMBER}\":{}}}", serde_json::to_string(token)?));
-            },
-            _ => {
-                let c = input[offset..].chars().next().ok_or_else(|| error("JSON invalide."))?;
-                output.push(c); offset += c.len_utf8();
-            },
-        }
-    }
-    Ok(serde_json::from_str(&output)?)
-}
-
-fn raw_number(value: &Value) -> Option<&str> {
-    value.as_object().filter(|v| v.len() == 1).and_then(|v| v.get(RAW_NUMBER)).and_then(Value::as_str)
-}
-
-fn restore_numbers(value: Value) -> Result<Value> {
-    if let Some(raw) = raw_number(&value) {
-        let parsed: Value = serde_json::from_str(raw)?;
-        let restored = parsed.as_number().ok_or_else(|| error("Nombre JSON invalide."))?;
-        // Do not silently round numbers in history/UI state either. Exact typed
-        // values can always be stored as {kind,value}; refuse lossy legacy metadata.
-        if number(raw)? != number(&restored.to_string())? {
-            return Err(error("Un nombre historique depasse la precision JSON prise en charge. L'ancien fichier reste intact."));
-        }
-        return Ok(parsed);
-    }
-    Ok(match value {
-        Value::Array(values) => Value::Array(values.into_iter().map(restore_numbers).collect::<Result<_>>()?),
-        Value::Object(values) => Value::Object(values.into_iter().map(|(k, v)| Ok((k, restore_numbers(v)?))).collect::<Result<_>>()?),
-        value => value,
-    })
+    Ok(serde_json::from_slice(bytes)?)
 }
 
 fn config_from_json(bytes: &[u8]) -> Result<(ProjectConfig, u32)> {
@@ -77,7 +19,7 @@ fn config_from_json(bytes: &[u8]) -> Result<(ProjectConfig, u32)> {
     let object = value.as_object_mut().ok_or_else(|| error("Profil ou configuration JSON invalide."))?;
     let version = match object.get("version") {
         None => 1,
-        Some(v) => raw_number(v).ok_or_else(|| error("Version de profil invalide."))?.parse::<u32>().map_err(|_| error("Version de profil invalide."))?,
+        Some(v) => v.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or_else(|| error("Version de profil invalide."))?,
     };
     if !matches!(version, 1 | 2) { return Err(error("Version de profil non prise en charge.")); }
     if let Some(fields) = object.get_mut("fields").and_then(Value::as_array_mut) {
@@ -85,7 +27,7 @@ fn config_from_json(bytes: &[u8]) -> Result<(ProjectConfig, u32)> {
             let field = field.as_object_mut().ok_or_else(|| error("Champ du dictionnaire invalide."))?;
             for key in ["minimum", "maximum"] {
                 if let Some(v) = field.get_mut(key) {
-                    if let Some(raw) = raw_number(v) { *v = Value::String(raw.to_string()); }
+                    if let Value::Number(raw) = v { *v = Value::String(raw.to_string()); }
                 }
             }
         }
@@ -95,18 +37,19 @@ fn config_from_json(bytes: &[u8]) -> Result<(ProjectConfig, u32)> {
             if let Some(rule) = rule.as_object_mut() { rule.entry("enabled").or_insert(Value::Bool(true)); }
         }
     }
-    let mut config: ProjectConfig = serde_json::from_value(restore_numbers(value)?)?;
+    let mut config: ProjectConfig = serde_json::from_value(value)?;
     config.version = 2;
     if config.header_row == 0 || config.header_row > 1_048_576 { return Err(error("Ligne d'en-tete invalide.")); }
     Ok((config, version))
 }
 
 fn legacy_cell(value: Value, kind: Option<&str>) -> Result<CellValue> {
-    if let Some(raw) = raw_number(&value) {
-        let kind = if raw.contains(['.', 'e', 'E']) { "decimal" } else { "integer" };
-        return Ok(CellValue::typed(kind, raw));
-    }
     let cell = match value {
+        Value::Number(raw) => {
+            let raw = raw.to_string();
+            let kind = if raw.contains(['.', 'e', 'E']) { "decimal" } else { "integer" };
+            CellValue::typed(kind, raw)
+        },
         Value::Null => CellValue::empty(),
         Value::Bool(v) => CellValue::typed("boolean", v.to_string()),
         Value::String(v) if kind == Some("decimal") => CellValue::typed("decimal", v),
@@ -139,7 +82,7 @@ fn decisions_from_json(bytes: &[u8], version: u32) -> Result<Decisions> {
             let cell = legacy_cell(value.remove("value").unwrap_or(Value::Null), kind.as_ref().and_then(Value::as_str))?;
             value.insert("value".into(), serde_json::to_value(cell)?);
         }
-        let decision: Decision = serde_json::from_value(restore_numbers(Value::Object(value))?)?;
+        let decision: Decision = serde_json::from_value(Value::Object(value))?;
         validate_decision(key, &decision)?;
         result.insert(key.clone(), decision);
     }
@@ -277,8 +220,8 @@ fn decode_project(data: &BTreeMap<String, Vec<u8>>) -> Result<SavedProject> {
     let (config, config_version) = config_from_json(required(data, "config")?)?;
     if config_version != version { return Err(error("Versions de projet et de configuration incoherentes.")); }
     let decisions = decisions_from_json(data.get("decisions").map_or(b"{}".as_slice(), Vec::as_slice), version)?;
-    let history = serde_json::from_value(restore_numbers(exact_json(data.get("history").map_or(b"[]".as_slice(), Vec::as_slice))?)?)?;
-    let ui_state = restore_numbers(exact_json(data.get("ui_state").map_or(b"{}".as_slice(), Vec::as_slice))?)?;
+    let history = serde_json::from_value(exact_json(data.get("history").map_or(b"[]".as_slice(), Vec::as_slice))?)?;
+    let ui_state = exact_json(data.get("ui_state").map_or(b"{}".as_slice(), Vec::as_slice))?;
     Ok(SavedProject { config, decisions, history, ui_state })
 }
 

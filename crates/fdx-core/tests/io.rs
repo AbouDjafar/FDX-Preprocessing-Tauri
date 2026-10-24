@@ -44,11 +44,11 @@ fn synthetic() -> BTreeMap<String, Vec<u8>> {
     result.insert("_rels/.rels".into(), format!("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"{REL}/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>").into_bytes());
     result.insert("xl/_rels/workbook.xml.rels".into(), format!("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"{REL}/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"{REL}/worksheet\" Target=\"/xl/worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"{REL}/styles\" Target=\"styles.xml\"/><Relationship Id=\"rId4\" Type=\"{REL}/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>").into_bytes());
     result.insert("xl/workbook.xml".into(), format!("<workbook xmlns=\"{NS}\" xmlns:r=\"{REL}\"><workbookPr date1904=\"0\"/><bookViews><workbookView activeTab=\"0\"/></bookViews><sheets><sheet name=\"Donnees\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Archive\" sheetId=\"7\" state=\"hidden\" r:id=\"rId2\"/></sheets><definedNames><definedName name=\"Zone\">Donnees!$A$1:$F$4</definedName><definedName name=\"_xlnm.Print_Area\" localSheetId=\"1\">Archive!$A$1:$B$2</definedName></definedNames><calcPr calcId=\"191029\"/></workbook>").into_bytes());
-    result.insert("xl/styles.xml".into(), format!(r#"<styleSheet xmlns="{NS}"><numFmts count="2"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="0.00,,&quot;M&quot;"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="3" fontId="0" fillId="0" borderId="0"><alignment textRotation="90"/></xf></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment textRotation="90"/></xf><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment textRotation="255" horizontal="right"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment textRotation="15"/></xf><xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="1"><dxf><numFmt numFmtId="166" formatCode="#,##0.000;[Red]-#,##0.000"/><alignment textRotation="30"/></dxf></dxfs></styleSheet>"#).into_bytes());
+    result.insert("xl/styles.xml".into(), format!(r##"<styleSheet xmlns="{NS}"><numFmts count="2"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="0.00,,&quot;M&quot;"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="3" fontId="0" fillId="0" borderId="0"><alignment textRotation="90"/></xf></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment textRotation="90"/></xf><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment textRotation="255" horizontal="right"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment textRotation="15"/></xf><xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="1"><dxf><numFmt numFmtId="166" formatCode="#,##0.000;[Red]-#,##0.000"/><alignment textRotation="30"/></dxf></dxfs></styleSheet>"##).into_bytes());
     result.insert("xl/sharedStrings.xml".into(), format!("<sst xmlns=\"{NS}\" count=\"1\" uniqueCount=\"1\"><si><r><rPr><b/></rPr><t>001</t></r><r><t>23</t></r><rPh sb=\"0\" eb=\"1\"><t>phonetic-not-data</t></rPh></si></sst>").into_bytes());
     result.insert("xl/worksheets/sheet1.xml".into(), format!(r#"<worksheet xmlns="{NS}"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:F4"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="2" max="2" width="23" customWidth="1" style="1"/></cols><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Nom</t></is></c><c r="B1" t="inlineStr"><is><t>Montant</t></is></c><c r="C1" t="inlineStr"><is><t>Identifiant</t></is></c><c r="D1" t="inlineStr"><is><t>Date</t></is></c><c r="E1" t="inlineStr"><is><t>Formule</t></is></c><c r="F1" t="inlineStr"><is><t>Destination</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t xml:space="preserve">  Alpha   SA  </t></is></c><c r="B2" s="1" t="inlineStr"><is><t>1 234,50</t></is></c><c r="C2" t="s"><v>0</v></c><c r="D2" s="3"><v>46100</v></c><c r="E2"><f>SUM(B2:B3)</f><v>0</v></c></row><row r="3" s="1" customFormat="1" ht="25" customHeight="1"><c r="A3" t="inlineStr"><is><t>Beta</t></is></c><c r="B3" s="1"><v>1250.12345678901</v></c><c r="C3" t="inlineStr"><is><t>=not_a_formula</t></is></c><c r="D3" s="3"><v>9999999999</v></c><c r="E3" t="b"><v>1</v></c></row><row r="4"><c r="B4" s="2"><v>0.125</v></c><c r="D4"><v>1.234567890123456789E+20</v></c></row></sheetData><autoFilter ref="A1:F4"/><mergeCells count="1"><mergeCell ref="E4:F4"/></mergeCells><conditionalFormatting sqref="B2:B4"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>0</formula></cfRule></conditionalFormatting><dataValidations count="1"><dataValidation type="whole" sqref="F2:F3" allowBlank="1"><formula1>0</formula1><formula2>100</formula2></dataValidation></dataValidations><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9"/></worksheet>"#).into_bytes());
     result.insert("xl/worksheets/sheet2.xml".into(), format!("<worksheet xmlns=\"{NS}\"><dimension ref=\"A1:B2\"/><sheetViews><sheetView workbookViewId=\"0\"/></sheetViews><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Conserver</t></is></c></row><row r=\"2\"><c r=\"B2\" s=\"4\"><v>123456789.125</v></c></row></sheetData><mergeCells count=\"1\"><mergeCell ref=\"A1:B1\"/></mergeCells></worksheet>").into_bytes());
-    result.insert("customXml/item1.xml".into(), b"<private-metadata><keep value=\"exact\"/></private-metadata>".to_vec());
+    result.insert("customXml/item1.xml".into(), b"<private-metadata><keep value=\"exact\"/><alignment textRotation=\"90\"/></private-metadata>".to_vec());
     result
 }
 
@@ -189,6 +189,28 @@ fn grouping_does_not_change_percent_scaling_literals_or_fractions() {
         ("# ##0.000", "###0.000"), ("#\u{a0}##0", "###0"),
         ("0\\,000", "0\\,000"), ("[>=1000]#,##0.000E+00", "[>=1000]###0.000E+00"),
     ] { assert_eq!(remove_grouping(input), expected); }
+}
+
+#[test]
+fn export_retains_negative_sections_scaling_and_quoted_units() {
+    let fixture = Fixture::new();
+    edit(&fixture.source, "xl/styles.xml", |x| x.replace("0.00,,&quot;M&quot;", "#,##0.00,,&quot; M, units&quot;;[Red](#,##0.00,,&quot; M, units&quot;);&quot;zero; literal&quot;;@"));
+    edit(&fixture.source, "xl/worksheets/sheet2.xml", |x| x.replace("123456789.125", "-123456789.125"));
+    let output = fixture.export("negative-scaled.xlsx");
+    let styles = xml(&output, "xl/styles.xml");
+    assert!(styles.contains("###0.00#######,,&quot; M, units&quot;;[Red](###0.00#######,,&quot; M, units&quot;);&quot;zero; literal&quot;;@"));
+    assert_eq!(read_source(&output, &JobControl::default()).unwrap().sheets[1].cell(2, 2).value, "-123456789.125");
+}
+
+#[test]
+fn unsupported_custom_precision_refuses_export_instead_of_dropping_format_semantics() {
+    let fixture = Fixture::new();
+    edit(&fixture.source, "xl/worksheets/sheet2.xml", |x| x.replace("123456789.125", "1e-40"));
+    let result = fixture.analyze(Decisions::new());
+    let output = fixture.path("tiny-scaled.xlsx");
+    let err = export_excel(&fixture.config, &result, &output, true, false, &JobControl::default()).unwrap_err();
+    assert!(err.to_string().contains("30 decimales"));
+    assert!(!output.exists()); no_temporary_files(fixture.dir.path());
 }
 
 #[test]
@@ -425,6 +447,16 @@ fn active_external_links_and_missing_relationship_targets_are_rejected() {
     assert!(read_source(&fixture.source, &JobControl::default()).is_err());
 }
 
+#[test]
+fn cyclic_part_relationships_are_rejected_before_umya_recursion() {
+    let fixture = Fixture::new();
+    let mut entries = parts(&fixture.source);
+    entries.insert("xl/worksheets/_rels/sheet1.xml.rels".into(), format!("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"cycle\" Type=\"{REL}/worksheet\" Target=\"sheet1.xml\"/></Relationships>").into_bytes());
+    fs::write(&fixture.source, zip_bytes(&entries)).unwrap();
+    let err = read_source(&fixture.source, &JobControl::default()).unwrap_err();
+    assert!(err.to_string().contains("cycliques"));
+}
+
 fn legacy_database(fixture: &Fixture, path: &Path, decisions: &[u8]) {
     let db = Connection::open(path).unwrap();
     db.execute("CREATE TABLE project (key TEXT PRIMARY KEY, value BLOB NOT NULL)", []).unwrap();
@@ -553,12 +585,17 @@ fn storage_does_not_overwrite_sources_dictionaries_or_arbitrary_existing_files()
 }
 
 #[test]
-fn legacy_non_midnight_dates_and_lossy_history_are_refused_not_truncated() {
+fn legacy_non_midnight_dates_are_refused_and_history_numbers_remain_exact() {
     let fixture = Fixture::new();
     let path = fixture.path("time.fdxproj");
     legacy_database(&fixture, &path, br#"{"Donnees!2:1":{"action":"set","value":"2025-09-30T12:34:56","value_kind":"date"}}"#);
     assert!(open_project(&path, &fixture.path("cache")).is_err());
     let path = fixture.path("history.fdxproj"); legacy_database(&fixture, &path, b"{}");
     let db = Connection::open(&path).unwrap(); db.execute("UPDATE project SET value = ?1 WHERE key = 'history'", ["[{\"legacy_number\":1.234567890123456789}]"]).unwrap(); drop(db);
-    assert!(open_project(&path, &fixture.path("cache")).is_err());
+    let loaded = open_project(&path, &fixture.path("cache")).unwrap();
+    assert_eq!(loaded.history[0]["legacy_number"].to_string(), "1.234567890123456789");
+    let migrated = fixture.path("history-v2.fdxproj");
+    save_project(&migrated, &loaded).unwrap();
+    let reopened = open_project(&migrated, &fixture.path("cache2")).unwrap();
+    assert_eq!(reopened.history, loaded.history);
 }

@@ -23,7 +23,7 @@ fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Inspect {workbook,header_row} => println!("{}",serde_json::to_string_pretty(&workbooks::inspect(&workbook,header_row,&job)?)?),
         Command::Selftest {output,scale} => {
-            if !scale.is_finite() || scale <= 0.0 || scale > 1000.0 { return Err(error("Echelle invalide.")); }
+            if !scale.is_finite() || scale <= 0.0 || scale > 100_000.0 { return Err(error("Echelle invalide.")); }
             let folder = tempfile::tempdir()?;
             let count = (3.0 * scale) as u32;
             let (source,dict) = demo::create(folder.path(),count)?;
@@ -34,6 +34,7 @@ fn run(cli: Cli) -> Result<()> {
             config.mappings = dictionary::suggest_mappings(&info.sheets[0].headers,&config.fields);
             for mapping in &mut config.mappings { mapping.confirmed = true; }
             let result = engine::analyze(&config,&data,&Decisions::new(),&job)?;
+            if result.row_count != count.max(3) { return Err(error("L'analyse n'a pas couvert toutes les lignes.")); }
             let destination = folder.path().join("resultat.xlsx");
             exporter::export_excel(&config,&result,&destination,true,false,&job)?;
             if workbooks::sha256(&source)? != data.source_hash { return Err(error("La source a ete modifiee.")); }

@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 class TauriOptions(webdriver.ChromeOptions):
@@ -40,7 +41,19 @@ def check(driver, folder):
     wait.until(lambda d: 'FDX' in d.find_element(By.TAG_NAME, 'body').text)
     assert driver.execute_script('return getComputedStyle(document.body).backgroundColor') != 'rgb(255, 255, 255)'
     driver.set_window_size(1366, 768)
+    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="try-demo"]')))
     driver.save_screenshot(str(folder / 'native-start.png'))
+    driver.find_element(By.CSS_SELECTOR, '[data-testid="try-demo"]').click()
+    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="stage-association"]'))).click()
+    confirm = '//button[normalize-space()="Confirmer toutes les associations"]'
+    wait.until(EC.element_to_be_clickable((By.XPATH, confirm))).click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//dialog' + confirm))).click()
+    wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'dialog[open]')))
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "Enregistrer et définir les règles")]'))).click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "Confirmer et analyser toutes les lignes")]'))).click()
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '[data-testid="finding"]')))
+    driver.save_screenshot(str(folder / 'native-review.png'))
+    assert not driver.find_elements(By.CSS_SELECTOR, '[data-testid="global-error"]')
     session = call(driver, 'demo')
     source = Path(session['config']['source_path'])
     baseline = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -78,8 +91,7 @@ def check(driver, folder):
     assert restored['dirty'] is True
     restored = call(driver, 'analyze', session=restored)
     assert restored['summary']['findings'] == session['summary']['findings']
-    # Run without developer toolchains on PATH; only WebView2 and system DLLs remain necessary.
-    return {'ok': True, 'rows': 3, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True}
+    return {'ok': True, 'rows': 3, 'native_ui': True, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True}
 
 
 if __name__ == '__main__':

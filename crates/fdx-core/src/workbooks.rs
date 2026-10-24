@@ -355,6 +355,7 @@ impl Package {
         zip.finish().map_err(|e| io_error("Finalisation ZIP impossible", e))
     }
     fn validate_relationships(&self, job: &JobControl) -> Result<()> {
+        let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (name, bytes) in self.parts.iter().filter(|(name, _)| name.ends_with(".rels")) {
             let xml = Xml::parse(bytes, job)?;
             let mut ids = BTreeSet::new();
@@ -372,8 +373,22 @@ impl Package {
                 }
                 let target = relationship_target(&base, node.required("Target")?)?;
                 self.get(&target)?;
+                graph.entry(base.clone()).or_default().push(target);
             }
         }
+        // umya recursively loads related parts. Refuse cycles before entering that
+        // reader, including cycles expressed using otherwise unknown relation types.
+        fn visit<'a>(node: &'a str, graph: &'a BTreeMap<String, Vec<String>>, states: &mut BTreeMap<&'a str, u8>, depth: usize, job: &JobControl) -> Result<()> {
+            job.check()?;
+            if depth > 64 || states.get(node) == Some(&1) { return Err(error("Relations Excel cycliques ou trop profondes.")); }
+            if states.get(node) == Some(&2) { return Ok(()); }
+            states.insert(node, 1);
+            if let Some(children) = graph.get(node) { for child in children { visit(child, graph, states, depth + 1, job)?; } }
+            states.insert(node, 2);
+            Ok(())
+        }
+        let mut states = BTreeMap::new();
+        for node in graph.keys() { visit(node, &graph, &mut states, 0, job)?; }
         Ok(())
     }
 }
@@ -546,8 +561,8 @@ pub(crate) fn decode_excel_text(value: &str) -> String {
                 if let Ok(code) = u16::from_str_radix(hex, 16) {
                     if (0xD800..=0xDBFF).contains(&code) && offset + 14 <= bytes.len()
                         && &bytes[offset + 7..offset + 9] == b"_x" && bytes[offset + 13] == b'_' {
-                        if let Ok(low) = std::str::from_utf8(&bytes[offset + 9..offset + 13]).unwrap_or("").parse::<String>() {
-                            if let Ok(low) = u16::from_str_radix(&low, 16) {
+                        if let Ok(low) = std::str::from_utf8(&bytes[offset + 9..offset + 13]) {
+                            if let Ok(low) = u16::from_str_radix(low, 16) {
                                 if (0xDC00..=0xDFFF).contains(&low) {
                                     let point = 0x10000 + ((u32::from(code) - 0xD800) << 10) + u32::from(low) - 0xDC00;
                                     if let Some(c) = char::from_u32(point) { output.push(c); offset += 14; continue; }

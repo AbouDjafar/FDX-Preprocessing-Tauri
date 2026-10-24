@@ -31,7 +31,7 @@ jobs:
       - name: Core and CLI lint
         run: cargo clippy --locked -p fdx-core -p fdx-cli --all-targets -- -D warnings
       - name: Native CLI self-test
-        run: cargo run --locked -p fdx-cli -- selftest --output qa/selftest.json
+        run: cargo run --locked -p fdx-cli -- selftest --output qa/selftest.json --scale 10000
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -63,6 +63,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+        working-directory: web
+      - name: Dependency security gate
+        run: npm audit --audit-level=high
         working-directory: web
       - run: npm run typecheck && npm test && npm run build
         working-directory: web

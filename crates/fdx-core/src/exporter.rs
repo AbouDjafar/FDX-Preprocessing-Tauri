@@ -44,10 +44,9 @@ fn numeric_format(raw: &str, previous: &str) -> Result<String> {
             coefficient.to_string().trim_start_matches('-').len().saturating_sub(1) as i64
         } else { (exponent - percent * 2 + scaling * 3).max(0) };
         if needed > 30 {
-            // General displays very small values scientifically without dropping the
-            // percentage or scaling semantics of a custom format.
-            let suffix = format!("{}{}", ",".repeat(scaling as usize), "%".repeat(percent as usize));
-            return Ok(format!("0.##############E+00{suffix}"));
+            // Replacing a whole custom format with scientific notation would drop
+            // negative sections, conditions and quoted units. Refuse instead.
+            return Err(error("Le format numerique exige plus de 30 decimales pour conserver la precision. Choisissez un format scientifique ou General dans une copie source, puis relancez l'analyse."));
         }
         if needed as usize > existing {
             let extra = "#".repeat(needed as usize - existing);
@@ -55,6 +54,9 @@ fn numeric_format(raw: &str, previous: &str) -> Result<String> {
             section.insert(last + 1, extra);
         }
         result.push_str(&section.concat());
+    }
+    if result.chars().count() > 255 && result != format {
+        return Err(error("Le format numerique precis depasse la limite Excel de 255 caracteres."));
     }
     Ok(result)
 }
@@ -284,7 +286,6 @@ fn write_sheet(bytes: &[u8], source: &SheetData, changes: &BTreeMap<(u32, u32), 
             let value = changed.as_ref().cloned().unwrap_or_else(|| source.cell(row, col));
             let original_style = effective_style(&xml, cell, row_node, col)?;
             let previous = styles.formats.get(original_style).ok_or_else(|| error("Style Excel introuvable."))?.clone();
-            let mut style = original_style;
             if changed.is_some() {
                 let code = match value.kind.as_str() {
                     "text" => "@".to_string(),
@@ -293,16 +294,18 @@ fn write_sheet(bytes: &[u8], source: &SheetData, changes: &BTreeMap<(u32, u32), 
                     "integer" | "decimal" => numeric_format(&value.value, &previous)?,
                     _ => previous.clone(),
                 };
-                style = styles.with_format(original_style, &code, job)?;
+                let style = styles.with_format(original_style, &code, job)?;
                 let new = serialized_cell(cell, row, col, &value, style, row_node)?;
                 if let Some(cell) = cell { patches.push((cell.start, cell.end, new.into_bytes())); }
                 else {
                     let position = cells.range(col + 1..).next().map_or(row_node.close_start, |(_, id)| xml.nodes[*id].start);
                     insertions.entry(position).or_default().push_str(&new);
                 }
-            } else if matches!(value.kind.as_str(), "integer" | "decimal") && !date_format(&previous) {
+            } else if matches!(value.kind.as_str(), "integer" | "decimal") && (!date_format(&previous)
+                || number(&value.value).is_ok_and(|n| n < BigDecimal::from(0) || n > BigDecimal::from(2_958_465)
+                    || (n.normalized().as_bigint_and_exponent().1 <= 0 && n > BigDecimal::from(60)))) {
                 let code = numeric_format(&value.value, &previous)?;
-                style = styles.with_format(original_style, &code, job)?;
+                let style = styles.with_format(original_style, &code, job)?;
                 if style != original_style {
                     if let Some(cell) = cell { patches.push((cell.start, cell.open_end, cell.tag(&[("s", Some(style.to_string()))], cell.empty).into_bytes())); }
                 }
@@ -516,10 +519,47 @@ fn validate_changes(config: &ProjectConfig, result: &AnalysisResult, source: &Sh
     Ok(changes)
 }
 
-fn verify(package: &Package, actual: &Package, source: &WorkbookData, config: &ProjectConfig, changes: &BTreeMap<(u32, u32), CellValue>, reports: &BTreeMap<String, Vec<Vec<CellValue>>>, job: &JobControl) -> Result<()> {
+fn verify_sheet_structure(before: &[u8], after: &[u8], job: &JobControl) -> Result<()> {
+    let before = normalize_inline(before, job)?;
+    let left = Xml::parse(&before, job)?;
+    let right = Xml::parse(after, job)?;
+    let left_data = left.child(left.root, "sheetData").ok_or_else(|| error("Donnees sources absentes."))?;
+    let right_data = right.child(right.root, "sheetData").ok_or_else(|| error("Donnees exportees absentes."))?;
+    let envelope = |bytes: &[u8], node: &Node| patch(bytes, vec![(node.start, node.end, node.tag(&[], true).into_bytes())]);
+    if envelope(&before, &left.nodes[left_data])? != envelope(after, &right.nodes[right_data])? {
+        return Err(error("Structure de feuille modifiee : dimensions, fusions, filtres, volets ou autres proprietes."));
+    }
+    let right_rows: BTreeMap<_, _> = right.children(right_data, "row").map(|id| (right.nodes[id].attr("r").unwrap_or(""), id)).collect();
+    for row_id in left.children(left_data, "row") {
+        job.check()?;
+        let row = &left.nodes[row_id];
+        let after_id = *right_rows.get(row.required("r")?).ok_or_else(|| error("Ligne source perdue a l'export."))?;
+        let after_row = &right.nodes[after_id];
+        if row.attrs != after_row.attrs { return Err(error("Proprietes de ligne modifiees sans autorisation.")); }
+        let right_cells: BTreeMap<_, _> = right.children(after_id, "c").map(|id| (right.nodes[id].attr("r").unwrap_or(""), id)).collect();
+        for cell_id in left.children(row_id, "c") {
+            let cell = &left.nodes[cell_id];
+            let after_id = *right_cells.get(cell.required("r")?).ok_or_else(|| error("Cellule source perdue a l'export."))?;
+            let metadata = |node: &Node| node.attrs.iter().filter(|(key, _)| key != "t" && key != "s").cloned().collect::<BTreeMap<_, _>>();
+            if metadata(cell) != metadata(&right.nodes[after_id]) { return Err(error("Metadonnees de cellule modifiees.")); }
+            if left.child(cell_id, "f").is_some() {
+                let formula = &before[cell.open_end..cell.close_start];
+                let other = &right.nodes[after_id];
+                if formula != &after[other.open_end..other.close_start] { return Err(error("Formule ou cache de formule modifie sans autorisation.")); }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn verify(package: &Package, actual: &Package, original: &Package, source: &WorkbookData, config: &ProjectConfig, changes: &BTreeMap<(u32, u32), CellValue>, reports: &BTreeMap<String, Vec<Vec<CellValue>>>, job: &JobControl) -> Result<()> {
     // Exact uncompressed-part comparison checks all structures, relationships and
     // metadata, including those that the typed cell model intentionally omits.
     if package.parts != actual.parts { return Err(error("Le fichier rouvert differe du paquet Excel attendu.")); }
+    for part in sheet_parts(original, job)? {
+        if reports.contains_key(&part.name) && config.report_collision == "replace" { continue; }
+        verify_sheet_structure(original.get(&part.path)?, actual.get(&part.path)?, job)?;
+    }
     let output = data_from_package(actual, String::new(), job)?;
     for before in &source.sheets {
         job.check()?;
@@ -543,8 +583,9 @@ fn verify(package: &Package, actual: &Package, source: &WorkbookData, config: &P
             }
         }
     }
+    let worksheet_paths: BTreeSet<_> = sheet_parts(actual, job)?.into_iter().map(|part| part.path).collect();
     for (name, bytes) in &actual.parts {
-        if !name.ends_with(".xml") { continue; }
+        if name != "xl/styles.xml" && !worksheet_paths.contains(name) { continue; }
         let xml = Xml::parse(bytes, job)?;
         for node in &xml.nodes {
             if node.local() == "alignment" && node.attr("textRotation").is_some_and(|v| v != "0") { return Err(error("Rotation du texte restante.")); }
@@ -626,8 +667,9 @@ pub fn export_excel(config: &ProjectConfig, result: &AnalysisResult, destination
         }
     }
     force_recalculation(&mut package, job)?;
+    let worksheet_paths: BTreeSet<_> = sheet_parts(&package, job)?.into_iter().map(|part| part.path).collect();
     for (name, bytes) in &mut package.parts {
-        if name.ends_with(".xml") { *bytes = normalize_inline(bytes, job)?; }
+        if name == "xl/styles.xml" || worksheet_paths.contains(name) { *bytes = normalize_inline(bytes, job)?; }
     }
     job.check()?;
     let mut temp = tempfile::Builder::new().prefix(".fdx-").suffix(".xlsx").tempfile_in(parent)?;
@@ -639,7 +681,7 @@ pub fn export_excel(config: &ProjectConfig, result: &AnalysisResult, destination
     job.report("export", 3, Some(5), "Reouverture et verification des valeurs et structures");
     let reopened = read_bounded(temp.path(), MAX_FILE, job)?;
     let actual = Package::from_bytes(&reopened, job)?;
-    verify(&package, &actual, &source, config, &changes, &reports, job)?;
+    verify(&package, &actual, &original, &source, config, &changes, &reports, job)?;
     let reopened_book = umya_read(&reopened, job)?;
     let expected_names = sheet_parts(&actual, job)?;
     if reopened_book.sheet_collection_no_check().iter().map(|s| s.name()).ne(expected_names.iter().map(|s| s.name.as_str())) {
