@@ -349,6 +349,40 @@ fn cancellation_before_read_and_during_verification_is_atomic() {
     no_temporary_files(fixture.dir.path());
 }
 
+#[cfg(windows)]
+#[test]
+fn locked_windows_destination_refuses_overwrite_without_changing_files() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let fixture = Fixture::new();
+    let result = fixture.analyze(Decisions::new());
+    let source_before = fs::read(&fixture.source).unwrap();
+    let output = fixture.path("locked.xlsx");
+    let target_before = b"Existing destination must remain intact";
+    fs::write(&output, target_before).unwrap();
+
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .share_mode(0)
+        .open(&output)
+        .unwrap();
+    let exported = export_excel(
+        &fixture.config,
+        &result,
+        &output,
+        true,
+        true,
+        &JobControl::default(),
+    );
+    drop(lock);
+
+    assert!(exported.is_err());
+    assert_eq!(fs::read(&output).unwrap(), target_before);
+    assert_eq!(fs::read(&fixture.source).unwrap(), source_before);
+    no_temporary_files(fixture.dir.path());
+}
+
 #[test]
 fn source_changed_during_export_is_not_published() {
     let fixture = Fixture::new();

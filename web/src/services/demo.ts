@@ -112,7 +112,7 @@ export class DemoAdapter implements Adapter {
       const { path } = req.payload as Operations['project_open']['payload']; this.assertFixture(path);
       const saved = this.projects.get(path);
       if (!saved) fail('NOT_FOUND', 'Aucun projet DEMO enregistré à cet emplacement en mémoire.');
-      const s = copy(saved!); s.session.id = crypto.randomUUID(); s.session.summary = null; s.session.export_path = null; s.session.revision = 0;
+      const s = copy(saved!); s.session.id = crypto.randomUUID(); s.session.summary = null; s.session.export_path = null; s.session.revision = 0; s.session.dirty = true;
       this.states.set(s.session.id, s); return s.session;
     }
     if (!previous) fail('SESSION_MISSING', 'Ouvrez ou créez un projet.');
@@ -179,8 +179,8 @@ export class DemoAdapter implements Adapter {
         s.session.config = { ...config, source_path: s.session.config.source_path, original_path: s.session.config.original_path, dictionary_path: s.session.config.dictionary_path, sheet: s.session.config.sheet, header_row: s.session.config.header_row, mappings: config.mappings.map(m => ({ ...m, confirmed: false })) }; break;
       }
       case 'project_save': {
-        const { path } = p as Operations['project_save']['payload']; this.assertFixture(path);
-        s.session.project_path = path;
+        const { path, ui_state } = p as Operations['project_save']['payload']; this.assertFixture(path);
+        s.session.project_path = path; if (ui_state !== undefined) s.session.ui_state = copy(ui_state);
         this.projects.set(path, copy(s)); this.states.set(s.session.id, s); return { path };
       }
       case 'export': return fail('DEMO_ONLY', 'Aucun export Excel réel dans le navigateur. Utilisez l’application de bureau.');

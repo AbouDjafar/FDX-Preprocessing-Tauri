@@ -39,6 +39,7 @@ export function ReviewStage({ next }: { next: () => void }) {
   const findings = view === 'findings' ? page.items as Finding[] : [];
   const keys = [...new Set(findings.map(f => f.key))];
   const submit = async (decisions: Decisions) => {
+    if (!w.decisionsReady) throw { code: 'STALE_ANALYSIS', message: 'Les paramètres ont changé. Relancez l’analyse avant de décider.' };
     await w.run('decide', { decisions }); setSelected(new Set());
     setQueued(old => new Set([...old, ...Object.keys(decisions)])); w.notify(`${Object.keys(decisions).length} décision(s) ajoutée(s). Vérifiez le lot pour actualiser les résultats.`);
   };

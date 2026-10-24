@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
-import { configIssues, normalizeError, readOps, sessionOps, type FdxError, type Op, type Operations, type Progress, type ProjectConfig, type RecentProject, type Session } from './model';
+import { analysisConfig, configIssues, normalizeError, readOps, sessionOps, type FdxError, type Op, type Operations, type Progress, type ProjectConfig, type RecentProject, type Session } from './model';
 import { createAdapter, type Adapter } from './services/bridge';
 import { Button, Modal } from './components/ui';
 
 type Run = <K extends Op>(op: K, payload: Operations[K]['payload'], quiet?: boolean) => Promise<Operations[K]['result']>;
 type Task = { id: string; op: Op; progress: Progress | null; cancelling: boolean };
 interface Workspace {
-  mode: Adapter['mode']; session: Session | null; draft: ProjectConfig | null; edited: boolean; unsaved: boolean;
+  mode: Adapter['mode']; session: Session | null; draft: ProjectConfig | null; edited: boolean; unsaved: boolean; decisionsReady: boolean;
   edit: (update: (config: ProjectConfig) => ProjectConfig) => void; task: Task | null; busy: boolean;
   error: FdxError | null; reportError: (error: unknown) => void; clearError: () => void;
   run: Run; act: (fn: () => Promise<unknown>) => void; cancel: () => Promise<void>;
@@ -30,6 +30,7 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
   const [toast, notify] = useState('');
   const [recent, setRecent] = useState<RecentProject[]>([]);
   const [unsaved, setUnsaved] = useState(false);
+  const [analyzedConfig, setAnalyzedConfig] = useState<string | null>(null);
   const [question, setQuestion] = useState<{ title: string; message: string; accept: string; resolve: (yes: boolean) => void } | null>(null);
   const questionRef = useRef(question); questionRef.current = question;
   const reportError = useCallback((value: unknown) => setError(normalizeError(value)), []);
@@ -51,6 +52,8 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
         if (sessionRef.current?.id !== base?.id || sessionRef.current?.revision !== base?.revision) throw { code: 'STALE_RESPONSE', message: 'Résultat périmé ignoré. Le projet a changé.' };
         if (base?.id === next.id && next.revision < base.revision) throw { code: 'STALE_RESPONSE', message: 'Révision périmée ignorée.' };
         sessionRef.current = next; setSession(next); draftRef.current = structuredClone(next.config); setDraft(draftRef.current); setUnsaved(op !== 'project_open');
+        if (op === 'analyze') setAnalyzedConfig(analysisConfig(next.config));
+        else if (['import', 'demo', 'create', 'project_open'].includes(op)) setAnalyzedConfig(null);
       } else if (op === 'project_save' || op === 'export') {
         if (sessionRef.current && sessionRef.current.id === base?.id) {
           const path = (response as { path: string }).path;
@@ -93,11 +96,12 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
   }), []);
   const answer = (yes: boolean) => { question?.resolve(yes); setQuestion(null); };
   const edited = !!draft && !!session && JSON.stringify(draft) !== JSON.stringify(session.config);
+  const decisionsReady = !!session?.summary && !!draft && analysisConfig(draft) === analyzedConfig;
   useEffect(() => {
     const guard = (e: BeforeUnloadEvent) => { if (edited || unsaved || task) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
   }, [edited, unsaved, task]);
-  return <Context.Provider value={{ mode: adapter.mode, session, draft, edited, unsaved, edit, task, busy: !!task, error, reportError, clearError: () => setError(null), run, act, cancel, saveDraft, analyze, recent, refreshRecent, confirm, toast, notify }}>
+  return <Context.Provider value={{ mode: adapter.mode, session, draft, edited, unsaved, decisionsReady, edit, task, busy: !!task, error, reportError, clearError: () => setError(null), run, act, cancel, saveDraft, analyze, recent, refreshRecent, confirm, toast, notify }}>
     {children}
     {question && <Modal title={question.title} onClose={() => answer(false)}><p className="dialog-message">{question.message}</p><footer className="modal-footer"><Button icon={X} onClick={() => answer(false)}>Annuler</Button><Button icon={Check} primary onClick={() => answer(true)}>{question.accept}</Button></footer></Modal>}
   </Context.Provider>;
