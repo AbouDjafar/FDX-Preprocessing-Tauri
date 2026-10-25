@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$Route,
     [ValidateSet('GET','POST','PUT','PATCH','DELETE')][string]$Method = 'GET',
-    [object]$Body
+    [object]$Body,
+    [string]$OutputFile
 )
 $ErrorActionPreference = 'Stop'
 if (!$Route.StartsWith('/') -or $Route.StartsWith('//')) { throw 'A relative GitHub API route is required.' }
@@ -22,5 +23,10 @@ try {
         $arguments.ContentType = 'application/json'
         $arguments.Body = ConvertTo-Json -InputObject $Body -Depth 30 -Compress
     }
-    Invoke-RestMethod @arguments
+    if ($OutputFile) {
+        if ($Method -ne 'GET' -or $null -ne $Body) { throw 'File downloads require a read-only request.' }
+        Invoke-WebRequest @arguments -OutFile $OutputFile
+    } else {
+        Invoke-RestMethod @arguments
+    }
 } finally { Remove-Variable credential,values,arguments -ErrorAction SilentlyContinue }

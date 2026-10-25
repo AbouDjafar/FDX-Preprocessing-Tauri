@@ -441,6 +441,67 @@ pub(crate) fn append_children(
     }
 }
 
+fn element_in_namespace(xml: &Xml, lineage: &[usize], namespace: &str) -> bool {
+    let Some(&id) = lineage.last() else {
+        return false;
+    };
+    let declaration = match xml.nodes[id].name.split_once(':') {
+        Some((prefix, _)) => format!("xmlns:{prefix}"),
+        None => "xmlns".into(),
+    };
+    lineage
+        .iter()
+        .rev()
+        .find_map(|id| xml.nodes[*id].attr(&declaration))
+        == Some(namespace)
+}
+
+fn inert_default_slicer_extension(xml: &Xml, id: usize) -> bool {
+    // umya 3.1.1 always emits this empty default; no slicer definitions are allowed.
+    let root = &xml.nodes[xml.root];
+    let list = &xml.nodes[id];
+    let only_attributes = |node: &Node, allowed: &[&str]| {
+        node.attrs.iter().all(|(name, _)| {
+            name == "xmlns" || name.starts_with("xmlns:") || allowed.contains(&name.as_str())
+        })
+    };
+    if root.local() != "styleSheet"
+        || !element_in_namespace(xml, &[xml.root], MAIN_NS)
+        || !root.children.contains(&id)
+        || xml.children(xml.root, "extLst").count() != 1
+        || list.local() != "extLst"
+        || !element_in_namespace(xml, &[xml.root, id], MAIN_NS)
+        || !only_attributes(list, &[])
+        || !list.text.trim().is_empty()
+        || list.children.len() != 1
+    {
+        return false;
+    }
+    let ext_id = list.children[0];
+    let ext = &xml.nodes[ext_id];
+    if ext.local() != "ext"
+        || !element_in_namespace(xml, &[xml.root, id, ext_id], MAIN_NS)
+        || ext.attr("uri") != Some("{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}")
+        || !only_attributes(ext, &["uri"])
+        || !ext.text.trim().is_empty()
+        || ext.children.len() != 1
+    {
+        return false;
+    }
+    let style_id = ext.children[0];
+    let style = &xml.nodes[style_id];
+    style.local() == "slicerStyles"
+        && element_in_namespace(
+            xml,
+            &[xml.root, id, ext_id, style_id],
+            "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main",
+        )
+        && style.attr("defaultSlicerStyle") == Some("SlicerStyleLight1")
+        && only_attributes(style, &["defaultSlicerStyle"])
+        && style.children.is_empty()
+        && style.text.trim().is_empty()
+}
+
 #[derive(Clone)]
 pub(crate) struct Package {
     pub parts: BTreeMap<String, Vec<u8>>,
@@ -541,7 +602,7 @@ impl Package {
             }
             if lower.ends_with(".xml") || lower.ends_with(".rels") {
                 let xml = Xml::parse(&content, job)?;
-                for node in &xml.nodes {
+                for (id, node) in xml.nodes.iter().enumerate() {
                     if matches!(
                         node.local(),
                         "extLst"
@@ -551,10 +612,14 @@ impl Package {
                             | "legacyDrawing"
                             | "drawing"
                             | "webPublishItems"
-                    ) {
-                        return Err(error(
-                            "Extensions ou objets Excel non conservables dans cette version.",
-                        ));
+                    ) && !(name == "xl/styles.xml"
+                        && node.local() == "extLst"
+                        && inert_default_slicer_extension(&xml, id))
+                    {
+                        return Err(error(format!(
+                            "Extensions ou objets Excel non conservables dans cette version : {name} ({}).",
+                            node.name
+                        )));
                     }
                     if node.local() == "Override" || node.local() == "Default" {
                         let kind = node.attr("ContentType").unwrap_or("").to_ascii_lowercase();

@@ -22,6 +22,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 const NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const DEFAULT_SLICER_EXTENSION: &str = r#"<extLst><ext uri="{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:slicerStyles defaultSlicerStyle="SlicerStyleLight1"/></ext></extLst>"#;
 
 fn zip_bytes(parts: &BTreeMap<String, Vec<u8>>) -> Vec<u8> {
     let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
@@ -212,10 +213,18 @@ fn date_epochs_and_fractional_serials_are_not_truncated() {
         x.replace("date1904=\"1\"", "date1904=\"0\"")
     });
     edit(&fixture.source, "xl/worksheets/sheet1.xml", |x| {
-        x.replace("<v>0</v>", "<v>60</v>")
+        x.replace(
+            "<c r=\"D2\" s=\"3\"><v>0</v></c>",
+            "<c r=\"D2\" s=\"3\"><v>60</v></c>",
+        )
     });
     let data = read_source(&fixture.source, &JobControl::default()).unwrap();
     assert_eq!(data.sheets[0].cell(2, 4), CellValue::typed("decimal", "60"));
+    assert_eq!(data.sheets[0].cell(2, 3), CellValue::text("00123"));
+    assert_eq!(
+        data.sheets[0].cell(2, 5),
+        CellValue::typed("formula", "=SUM(B2:B3)")
+    );
 }
 
 #[test]
@@ -856,6 +865,113 @@ fn forged_formula_unmapped_and_merge_changes_are_refused() {
 }
 
 #[test]
+fn empty_default_slicer_metadata_is_preserved_without_losing_numeric_precision() {
+    let fixture = Fixture::new();
+    edit(&fixture.source, "xl/styles.xml", |x| {
+        x.replace(
+            "</styleSheet>",
+            &format!("{DEFAULT_SLICER_EXTENSION}</styleSheet>"),
+        )
+    });
+    let before = fs::read(&fixture.source).unwrap();
+    let output = fixture.export("default-style.xlsx");
+    assert!(xml(&output, "xl/styles.xml").contains(DEFAULT_SLICER_EXTENSION));
+    assert_eq!(fs::read(&fixture.source).unwrap(), before);
+    let data = read_source(&output, &JobControl::default()).unwrap();
+    assert_eq!(
+        data.sheets[0].cell(4, 4),
+        CellValue::typed("decimal", "1.234567890123456789E+20")
+    );
+    no_temporary_files(fixture.dir.path());
+}
+
+#[test]
+fn umya_generated_workbook_can_be_read_and_exported() {
+    let fixture = Fixture::new();
+    let book = umya_spreadsheet::reader::xlsx::read_reader(
+        Cursor::new(fs::read(&fixture.source).unwrap()),
+        false,
+    )
+    .unwrap();
+    let mut bytes = Vec::new();
+    umya_spreadsheet::writer::xlsx::write_writer(&book, &mut bytes).unwrap();
+    fs::write(&fixture.source, &bytes).unwrap();
+    assert!(xml(&fixture.source, "xl/styles.xml").contains(DEFAULT_SLICER_EXTENSION));
+    let source = read_source(&fixture.source, &JobControl::default()).unwrap();
+    assert_eq!(source.sheets.len(), 2);
+    let output = fixture.export("umya-output.xlsx");
+    let exported = read_source(&output, &JobControl::default()).unwrap();
+    assert_eq!(exported.sheets[0].cell(4, 4), source.sheets[0].cell(4, 4));
+    assert_eq!(fs::read(&fixture.source).unwrap(), bytes);
+    assert!(xml(&output, "xl/styles.xml").contains(DEFAULT_SLICER_EXTENSION));
+    no_temporary_files(fixture.dir.path());
+}
+
+#[test]
+fn slicer_extension_allowlist_rejects_payloads_namespace_spoofing_and_other_locations() {
+    let extension = DEFAULT_SLICER_EXTENSION;
+    let variants = [
+        ("unknown URI", extension.replace("EB79DEF2", "FFFFFFFF")),
+        (
+            "wrong style namespace",
+            extension.replace(
+                "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main",
+                "urn:unsupported",
+            ),
+        ),
+        (
+            "wrong list namespace",
+            extension.replace("<extLst>", "<extLst xmlns=\"urn:unsupported\">"),
+        ),
+        (
+            "wrong ext namespace",
+            extension.replace("<ext uri=", "<ext xmlns=\"urn:unsupported\" uri="),
+        ),
+        ("custom default", extension.replace("SlicerStyleLight1", "CustomStyle")),
+        ("list attributes", extension.replace("<extLst>", "<extLst count=\"1\">")),
+        ("ext attributes", extension.replace("<ext uri=", "<ext extra=\"1\" uri=")),
+        (
+            "style attributes",
+            extension.replace("<x14:slicerStyles ", "<x14:slicerStyles count=\"1\" "),
+        ),
+        (
+            "style definitions",
+            extension.replace("/>", "><x14:slicerStyle name=\"CustomStyle\"/></x14:slicerStyles>"),
+        ),
+        (
+            "style text",
+            extension.replace("/>", ">payload</x14:slicerStyles>"),
+        ),
+        (
+            "another extension",
+            extension.replace("</extLst>", "<ext uri=\"unknown\"/></extLst>"),
+        ),
+        ("duplicate lists", format!("{extension}{extension}")),
+        ("nested list", format!("<wrapper>{extension}</wrapper>")),
+    ];
+    for (label, invalid) in variants {
+        let fixture = Fixture::new();
+        edit(&fixture.source, "xl/styles.xml", |x| {
+            x.replace("</styleSheet>", &format!("{invalid}</styleSheet>"))
+        });
+        let err = read_source(&fixture.source, &JobControl::default()).unwrap_err();
+        assert!(err.to_string().contains("Extensions ou objets"), "{label}: {err}");
+    }
+    for (part, closing) in [
+        ("xl/worksheets/sheet1.xml", "</worksheet>"),
+        ("xl/workbook.xml", "</workbook>"),
+        ("customXml/item1.xml", "</private-metadata>"),
+    ] {
+        let fixture = Fixture::new();
+        edit(&fixture.source, part, |x| {
+            x.replace(closing, &format!("{extension}{closing}"))
+        });
+        let err = read_source(&fixture.source, &JobControl::default()).unwrap_err();
+        assert!(err.to_string().contains("Extensions ou objets"), "{part}: {err}");
+    }
+}
+
+#[test]
 fn unsafe_xml_is_refused_in_every_xml_part() {
     for part in [
         "xl/workbook.xml",
@@ -884,6 +1000,7 @@ fn unsupported_objects_prefixed_extensions_and_bad_zip_paths_are_rejected() {
     for path in [
         "xl/drawings/drawing1.xml",
         "xl/pivotTables/pivot1.xml",
+        "xl/slicers/slicer1.xml",
         "xl/vbaProject.bin",
         "../escape.xml",
         "/absolute.xml",
