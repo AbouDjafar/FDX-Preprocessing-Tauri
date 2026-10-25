@@ -6,6 +6,10 @@ on:
         description: Format Rust sources after implementation
         type: boolean
         default: false
+      resolve_dependencies:
+        description: Refresh dependency locks (disable for formatting only)
+        type: boolean
+        default: true
 permissions:
   contents: write
 concurrency:
@@ -26,6 +30,7 @@ jobs:
         with:
           components: rustfmt
       - name: Generate lockfiles remotely
+        if: inputs.resolve_dependencies
         run: |
           npm --prefix web install --package-lock-only --ignore-scripts
           cargo generate-lockfile
@@ -37,7 +42,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Cargo.lock web/package-lock.json
-          if [ '${{ inputs.format_rust }}' = 'true' ]; then git add 'crates/**/*.rs' 'src-tauri/**/*.rs'; fi
+          if [ '${{ inputs.format_rust }}' = 'true' ]; then git add -- ':(glob)crates/**/*.rs' ':(glob)src-tauri/**/*.rs'; fi
           if ! git diff --cached --quiet; then git commit -m 'Lock dependencies and normalize sources using Actions [skip ci]'; git push origin HEAD:main; fi
       - name: Compiler provenance
         run: |

@@ -29,6 +29,7 @@ jobs:
       - name: Core and CLI tests
         run: cargo test --locked -p fdx-core -p fdx-cli
       - name: Core and CLI lint
+        if: ${{ !cancelled() }}
         run: cargo clippy --locked -p fdx-core -p fdx-cli --all-targets -- -D warnings
       - name: Native CLI self-test
         run: cargo run --locked -p fdx-cli -- selftest --output qa/selftest.json --scale 10000

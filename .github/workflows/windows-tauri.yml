@@ -53,9 +53,9 @@ jobs:
       - name: Rust Windows tests and lint
         run: |
           cargo test --locked --workspace
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $testsFailed = $LASTEXITCODE
           cargo clippy --locked --workspace --all-targets -- -D warnings
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -or $testsFailed) { exit 1 }
       - name: Build release and NSIS installer
         working-directory: src-tauri
         run: |
