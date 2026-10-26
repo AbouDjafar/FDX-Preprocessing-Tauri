@@ -805,7 +805,10 @@ mod tests {
         let phone_key = key(&analyzed, 2, 2);
         let date_key = key(&analyzed, 3, 4);
         let first_batch = Decisions::from([
-            (name_key.clone(), set_value(CellValue::text("Atelier corrige"))),
+            (
+                name_key.clone(),
+                set_value(CellValue::text("Atelier corrige")),
+            ),
             (phone_key, Decision::default()),
         ]);
 
@@ -813,12 +816,7 @@ mod tests {
         let source = PathBuf::from(&initial.config.source_path);
         let parked = source.with_extension("temporarily-unavailable");
         fs::rename(&source, &parked).unwrap();
-        let first = command(
-            &app,
-            "decide",
-            &analyzed,
-            json!({"decisions": first_batch}),
-        );
+        let first = command(&app, "decide", &analyzed, json!({"decisions": first_batch}));
         let after_first = snapshot(&app, &first);
         assert_eq!(after_first.revision, initial.revision + 1);
         assert_eq!(after_first.decisions, first_batch);
@@ -838,12 +836,7 @@ mod tests {
                 set_value(CellValue::typed("date", "2025-09-30")),
             ),
         ]);
-        let second = command(
-            &app,
-            "decide",
-            &first,
-            json!({"decisions": second_batch}),
-        );
+        let second = command(&app, "decide", &first, json!({"decisions": second_batch}));
         let after_second = snapshot(&app, &second);
         let mut combined = first_batch.clone();
         combined.extend(second_batch);
@@ -903,7 +896,9 @@ mod tests {
             )
             .unwrap_err();
         assert!(
-            failure.to_string().contains("ne fait pas partie du resultat"),
+            failure
+                .to_string()
+                .contains("ne fait pas partie du resultat"),
             "{failure}"
         );
         assert_unchanged(&before, &snapshot(&app, &analyzed));
@@ -916,7 +911,10 @@ mod tests {
         let analyzed = analyzed_demo(&app);
         let original = snapshot(&app, &analyzed);
         let batch = Decisions::from([
-            (key(&analyzed, 2, 1), set_value(CellValue::text("Nom retenu"))),
+            (
+                key(&analyzed, 2, 1),
+                set_value(CellValue::text("Nom retenu")),
+            ),
             (
                 key(&analyzed, 3, 4),
                 set_value(CellValue::typed("date", "2025-09-30")),
@@ -983,7 +981,10 @@ mod tests {
         let failure = app
             .execute(request("analyze", Some(&configured), json!({})), &job)
             .unwrap_err();
-        assert!(failure.to_string().contains("Importez-le a nouveau"), "{failure}");
+        assert!(
+            failure.to_string().contains("Importez-le a nouveau"),
+            "{failure}"
+        );
         assert!(
             !observed.load(Ordering::Relaxed),
             "Stale source reached the business analysis"
@@ -1117,12 +1118,18 @@ mod tests {
         )]);
         let failure = app
             .execute(
-                request("decide", Some(&configured), json!({"decisions": first_batch})),
+                request(
+                    "decide",
+                    Some(&configured),
+                    json!({"decisions": first_batch}),
+                ),
                 &JobControl::default(),
             )
             .unwrap_err();
         assert!(
-            failure.to_string().contains("parametres ont change depuis l'analyse"),
+            failure
+                .to_string()
+                .contains("parametres ont change depuis l'analyse"),
             "{failure}"
         );
         assert_unchanged(&stale, &snapshot(&app, &configured));
@@ -1134,17 +1141,15 @@ mod tests {
             key(&fresh, 3, 4),
             set_value(CellValue::typed("date", "2025-09-30")),
         )]);
-        let second = command(
-            &app,
-            "decide",
-            &first,
-            json!({"decisions": second_batch}),
-        );
+        let second = command(&app, "decide", &first, json!({"decisions": second_batch}));
         let accumulated = snapshot(&app, &second);
         assert!(accumulated.dirty);
         assert_eq!(accumulated.decisions.len(), 2);
         assert_eq!(accumulated.revision, fresh_snapshot.revision + 2);
-        assert_eq!(analysis_count(&accumulated), analysis_count(&fresh_snapshot));
+        assert_eq!(
+            analysis_count(&accumulated),
+            analysis_count(&fresh_snapshot)
+        );
         assert_same_arc(&fresh_snapshot.result, &accumulated.result);
         assert_eq!(
             engine::config_hash(&accumulated.config).unwrap(),

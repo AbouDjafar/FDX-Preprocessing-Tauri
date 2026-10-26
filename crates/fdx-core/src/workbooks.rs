@@ -1106,10 +1106,7 @@ pub(crate) fn encode_excel_text(value: &str) -> String {
 pub(crate) fn serial_date(raw: &str, date1904: bool) -> Option<String> {
     let number = number(raw).ok()?;
     let serial = number.to_i64()?;
-    if number != serial
-        || !(0..=2_958_465).contains(&serial)
-        || (!date1904 && serial == 60)
-    {
+    if number != serial || !(0..=2_958_465).contains(&serial) || (!date1904 && serial == 60) {
         return None;
     }
     let base = if date1904 {

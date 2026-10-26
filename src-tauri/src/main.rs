@@ -8,7 +8,10 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tauri::{ipc::{Channel, JavaScriptChannelId}, Manager, State};
+use tauri::{
+    ipc::{Channel, JavaScriptChannelId},
+    Manager, State,
+};
 
 #[derive(Serialize)]
 struct ApiError {

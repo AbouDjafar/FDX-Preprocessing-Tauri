@@ -927,16 +927,28 @@ fn slicer_extension_allowlist_rejects_payloads_namespace_spoofing_and_other_loca
             "wrong ext namespace",
             extension.replace("<ext uri=", "<ext xmlns=\"urn:unsupported\" uri="),
         ),
-        ("custom default", extension.replace("SlicerStyleLight1", "CustomStyle")),
-        ("list attributes", extension.replace("<extLst>", "<extLst count=\"1\">")),
-        ("ext attributes", extension.replace("<ext uri=", "<ext extra=\"1\" uri=")),
+        (
+            "custom default",
+            extension.replace("SlicerStyleLight1", "CustomStyle"),
+        ),
+        (
+            "list attributes",
+            extension.replace("<extLst>", "<extLst count=\"1\">"),
+        ),
+        (
+            "ext attributes",
+            extension.replace("<ext uri=", "<ext extra=\"1\" uri="),
+        ),
         (
             "style attributes",
             extension.replace("<x14:slicerStyles ", "<x14:slicerStyles count=\"1\" "),
         ),
         (
             "style definitions",
-            extension.replace("/>", "><x14:slicerStyle name=\"CustomStyle\"/></x14:slicerStyles>"),
+            extension.replace(
+                "/>",
+                "><x14:slicerStyle name=\"CustomStyle\"/></x14:slicerStyles>",
+            ),
         ),
         (
             "style text",
@@ -955,7 +967,10 @@ fn slicer_extension_allowlist_rejects_payloads_namespace_spoofing_and_other_loca
             x.replace("</styleSheet>", &format!("{invalid}</styleSheet>"))
         });
         let err = read_source(&fixture.source, &JobControl::default()).unwrap_err();
-        assert!(err.to_string().contains("Extensions ou objets"), "{label}: {err}");
+        assert!(
+            err.to_string().contains("Extensions ou objets"),
+            "{label}: {err}"
+        );
     }
     for (part, closing) in [
         ("xl/worksheets/sheet1.xml", "</worksheet>"),
@@ -967,7 +982,10 @@ fn slicer_extension_allowlist_rejects_payloads_namespace_spoofing_and_other_loca
             x.replace(closing, &format!("{extension}{closing}"))
         });
         let err = read_source(&fixture.source, &JobControl::default()).unwrap_err();
-        assert!(err.to_string().contains("Extensions ou objets"), "{part}: {err}");
+        assert!(
+            err.to_string().contains("Extensions ou objets"),
+            "{part}: {err}"
+        );
     }
 }
 
