@@ -160,6 +160,10 @@ def check(driver, folder):
 
 
 if __name__ == '__main__':
+    if os.environ.get('GITHUB_ACTIONS') != 'true':
+        raise SystemExit('Native executable verification is restricted to GitHub Actions.')
+    import winreg
+
     destination = Path('qa/native')
     destination.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
@@ -184,8 +188,25 @@ if __name__ == '__main__':
     driver = None
     service_started = False
     application = None
+    policy = None
+    previous_policy = None
+    application_name = Path(sys.argv[1]).name
     application_log = (destination / 'application.log').open('w', encoding='utf-8')
     try:
+        # Runtime 150+ ignores browser-argument environment overrides in elevated
+        # hosts. Use the documented per-executable policy on this disposable CI
+        # runner, restoring it below. The distributed application is unchanged.
+        # https://github.com/MicrosoftEdge/WebView2Feedback/issues/5645
+        policy = winreg.CreateKeyEx(
+            winreg.HKEY_LOCAL_MACHINE,
+            r'SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments',
+            0, winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE,
+        )
+        try:
+            previous_policy = winreg.QueryValueEx(policy, application_name)
+        except FileNotFoundError:
+            pass
+        winreg.SetValueEx(policy, application_name, 0, winreg.REG_SZ, environment['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'])
         application = subprocess.Popen(
             [str(Path(sys.argv[1]).resolve())], env=environment,
             stdout=application_log, stderr=subprocess.STDOUT,
@@ -238,4 +259,10 @@ if __name__ == '__main__':
             service.stop()
         if application and application.poll() is None:
             subprocess.run(['taskkill', '/PID', str(application.pid), '/T', '/F'], capture_output=True, timeout=15)
+        if policy is not None:
+            if previous_policy is None:
+                winreg.DeleteValue(policy, application_name)
+            else:
+                winreg.SetValueEx(policy, application_name, 0, previous_policy[1], previous_policy[0])
+            winreg.CloseKey(policy)
         application_log.close()
