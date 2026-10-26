@@ -240,11 +240,10 @@ if __name__ == '__main__':
                 (destination / 'failure.html').write_text(driver.page_source[:200000], encoding='utf-8')
             except Exception:
                 pass
-        else:
-            try:
-                startup_diagnostics(destination)
-            except Exception as diagnostic_error:
-                print(f'Startup diagnostics unavailable: {diagnostic_error}', flush=True)
+        try:
+            startup_diagnostics(destination)
+        except Exception as diagnostic_error:
+            print(f'Startup diagnostics unavailable: {diagnostic_error}', flush=True)
         raise
     finally:
         if driver:

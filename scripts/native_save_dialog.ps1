@@ -13,6 +13,7 @@ $condition = New-Object System.Windows.Automation.AndCondition @(
     (New-Object System.Windows.Automation.PropertyCondition $automation::ClassNameProperty,'#32770')
 )
 $deadline = [DateTime]::UtcNow.AddSeconds(30)
+$reported = $false
 while ([DateTime]::UtcNow -lt $deadline) {
     $dialog = $automation::RootElement.FindFirst($scope,$condition)
     if ($null -ne $dialog) {
@@ -25,7 +26,20 @@ while ([DateTime]::UtcNow -lt $deadline) {
             (New-Object System.Windows.Automation.PropertyCondition $automation::ControlTypeProperty,([System.Windows.Automation.ControlType]::Button))
         )
         $fileName = $dialog.FindFirst($scope,$nameCondition)
+        if ($null -eq $fileName) {
+            $edits = $dialog.FindAll($scope,(New-Object System.Windows.Automation.PropertyCondition $automation::ControlTypeProperty,([System.Windows.Automation.ControlType]::Edit)))
+            foreach ($edit in $edits) {
+                if ($edit.Current.Name -match 'file name|nom du fichier') { $fileName = $edit; break }
+            }
+        }
         $save = $dialog.FindFirst($scope,$saveCondition)
+        if (-not $reported) {
+            $reported = $true
+            foreach ($element in $dialog.FindAll($scope,[System.Windows.Automation.Condition]::TrueCondition)) {
+                $item = $element.Current
+                Write-Output ($item.ControlType.ProgrammaticName + ' | ' + $item.AutomationId + ' | ' + $item.Name)
+            }
+        }
         if ($null -ne $fileName -and $null -ne $save) {
             $value = $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
             $value.SetValue($Destination)
