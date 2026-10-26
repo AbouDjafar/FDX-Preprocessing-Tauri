@@ -20,8 +20,8 @@ public static class FdxNativePicker {
     private static extern bool EnumChildWindows(IntPtr parent, EnumChild callback, IntPtr data);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)]
     private static extern int GetClassNameW(IntPtr window, StringBuilder name, int size);
-    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
-    private static extern int GetWindowTextW(IntPtr window, StringBuilder text, int size);
+    [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)]
+    private static extern IntPtr ReadText(IntPtr window, uint message, UIntPtr size, StringBuilder text);
     public static string ClassName(IntPtr window) {
         var name = new StringBuilder(256);
         GetClassNameW(window, name, name.Capacity);
@@ -29,7 +29,7 @@ public static class FdxNativePicker {
     }
     public static string Text(IntPtr window) {
         var text = new StringBuilder(32768);
-        GetWindowTextW(window, text, text.Capacity);
+        ReadText(window, 0x000D, (UIntPtr)text.Capacity, text);
         return text.ToString();
     }
     public static IntPtr FindEdit(IntPtr parent) {
