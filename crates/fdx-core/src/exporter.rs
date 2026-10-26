@@ -541,8 +541,7 @@ fn write_sheet(
             } else if matches!(value.kind.as_str(), "integer" | "decimal")
                 && (!date_format(&previous)
                     || number(&value.value).is_ok_and(|n| {
-                        n < 0
-                            || n > 2_958_465
+                        !(BigDecimal::from(0)..=BigDecimal::from(2_958_465)).contains(&n)
                             || (n.normalized().as_bigint_and_exponent().1 <= 0 && n > 60)
                     }))
             {

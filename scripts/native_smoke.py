@@ -11,7 +11,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
@@ -54,6 +54,38 @@ def check(driver, folder):
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '[data-testid="finding"]')))
     driver.save_screenshot(str(folder / 'native-review.png'))
     assert not driver.find_elements(By.CSS_SELECTOR, '[data-testid="global-error"]')
+    finding = driver.find_elements(By.CSS_SELECTOR, '[data-testid="finding"]')[0]
+    assert 'phone_multiple' in finding.text
+    finding.find_element(By.XPATH, './/button[contains(., "Examiner et décider")]').click()
+    decision = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'dialog[open] select')))
+    Select(decision).select_by_value('first')
+    driver.find_element(By.XPATH, '//dialog//button[contains(., "Ajouter la décision au lot")]').click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//button[normalize-space()="Vérifier le lot"]'))).click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//button[normalize-space()="Analyser à nouveau"]')))
+    driver.find_element(By.CSS_SELECTOR, '[data-testid="stage-export"]').click()
+    wait.until(EC.visibility_of_element_located((By.XPATH, '//label[contains(., "J’autorise l’export avec les anomalies restantes")]/input'))).click()
+    ui_output = folder / 'resultat interface.xlsx'
+    # Substitute only the OS file picker; all application commands and Excel work remain native.
+    driver.execute_script('''
+      const original = window.__TAURI_INTERNALS__.invoke;
+      const destination = arguments[0];
+      window.__TAURI_INTERNALS__.invoke = (command, args, options) => {
+        if (command === 'plugin:dialog|save') {
+          window.__TAURI_INTERNALS__.invoke = original;
+          return Promise.resolve(destination);
+        }
+        return original(command, args, options);
+      };
+    ''', str(ui_output))
+    driver.find_element(By.CSS_SELECTOR, '[data-testid="export-button"]').click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//dialog//button[normalize-space()="Exporter et vérifier"]'))).click()
+    wait.until(lambda _: ui_output.exists())
+    ui_book = load_workbook(ui_output)
+    assert ui_book['Marches fictifs']['B2'].value == '699123456'
+    assert not any(row[6] == 'phone_multiple' for row in ui_book['À vérifier'].iter_rows(min_row=2, values_only=True))
+    ui_book.close()
+    wait.until(EC.element_to_be_clickable((By.XPATH, '//button[normalize-space()="Ouvrir le classeur"]')))
+    driver.save_screenshot(str(folder / 'native-export.png'))
     session = call(driver, 'demo')
     source = Path(session['config']['source_path'])
     baseline = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -91,7 +123,7 @@ def check(driver, folder):
     assert restored['dirty'] is True
     restored = call(driver, 'analyze', session=restored)
     assert restored['summary']['findings'] == session['summary']['findings']
-    return {'ok': True, 'rows': 3, 'native_ui': True, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True}
+    return {'ok': True, 'rows': 3, 'native_ui': True, 'native_ui_export': True, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True}
 
 
 if __name__ == '__main__':

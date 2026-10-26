@@ -69,6 +69,9 @@ test('rules and review controls fit the display, DPR and logical zoom', async ({
   await page.screenshot({ path: info.outputPath('review-decision-control.png') });
   await decide.click();
   const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeInViewport({ ratio: 0.99 });
+  const dialogBounds = await dialog.boundingBox();
+  expect(dialogBounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
   await expect(dialog.getByLabel('Décision', { exact: true })).toHaveAccessibleName('Décision');
   await usableControl(dialog.getByLabel('Décision', { exact: true }), page);
   await usableControl(dialog.getByRole('button', { name: 'Ajouter la décision au lot', exact: true }), page);

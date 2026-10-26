@@ -1,4 +1,4 @@
-import { cloneElement, useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, useId, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Info, X, type LucideIcon } from 'lucide-react';
 
 export function Button({ icon: Icon, children, primary, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon; primary?: boolean }) {
@@ -29,11 +29,23 @@ export function Modal({ title, children, onClose, wide = false }: { title: strin
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const close = useRef(onClose); close.current = onClose;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current!;
     const previous = document.activeElement as HTMLElement | null;
+    const updateZoom = () => {
+      let zoom = 1;
+      // Viewport units do not shrink with CSS zoom; include each ancestor's local zoom.
+      for (let element: HTMLElement | null = dialog; element; element = element.parentElement) {
+        const value = getComputedStyle(element).getPropertyValue('zoom').trim();
+        const scale = Number.parseFloat(value) / (value.endsWith('%') ? 100 : 1);
+        if (Number.isFinite(scale) && scale > 0) zoom *= scale;
+      }
+      dialog.style.setProperty('--modal-effective-zoom', String(zoom));
+    };
+    updateZoom();
     dialog.showModal();
-    return () => { dialog.close(); if (previous?.isConnected) previous.focus(); };
+    window.addEventListener('resize', updateZoom);
+    return () => { window.removeEventListener('resize', updateZoom); dialog.close(); if (previous?.isConnected) previous.focus(); };
   }, []);
   return <dialog ref={ref} className={`modal ${wide ? 'modal-wide' : ''}`} aria-labelledby={titleId} onCancel={e => { e.preventDefault(); close.current(); }}>
     <header className="modal-head"><h2 id={titleId}>{title}</h2><IconButton icon={X} label="Fermer la fenêtre" onClick={onClose} /></header>{children}
