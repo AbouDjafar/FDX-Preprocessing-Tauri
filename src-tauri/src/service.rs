@@ -140,13 +140,14 @@ fn dictionary_text(path: &Path) -> Result<String> {
             return Err(error("Le dictionnaire UTF-16 est incomplet."));
         }
         let little = bytes[0] == 0xff;
-        let units: Vec<u16> = bytes[2..]
-            .chunks_exact(2)
+        let (pairs, _) = bytes[2..].as_chunks::<2>();
+        let units: Vec<u16> = pairs
+            .iter()
             .map(|b| {
                 if little {
-                    u16::from_le_bytes([b[0], b[1]])
+                    u16::from_le_bytes(*b)
                 } else {
-                    u16::from_be_bytes([b[0], b[1]])
+                    u16::from_be_bytes(*b)
                 }
             })
             .collect();
