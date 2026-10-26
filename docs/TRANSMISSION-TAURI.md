@@ -2,7 +2,9 @@
 
 ## Etat et objectif
 
-Migration vers 2.0.0 : React/TypeScript, Tauri 2, moteur entierement Rust. Le code Python conserve sert d'oracle de test, jamais de runtime distribue. Ne pas confondre presence de code, build reussi et release validee. Lire les resultats Actions du commit concerne avant toute affirmation de recette.
+Version 2.0.0 livree : React/TypeScript, Tauri 2, moteur entierement Rust. Le code Python conserve sert d'oracle de test, jamais de runtime distribue. Ne pas confondre presence de code, build reussi et release validee. Lire les resultats Actions du commit concerne avant toute affirmation de recette.
+
+Release : https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0 ; commit exact `c80275963ef9ca5976800a27d7188b36a373d38c`. Runs reussis : checks `40359754161`, Windows `40359786062`, publication sans recompilation `40362120944`. Verification : 81 tests Rust Windows, 19 tests frontend, 23 scenarios Playwright, 7 comparaisons independantes avec l'oracle Python ; parcours natif avec vrai dialogue Windows, telephone multiple, export rouvert, source intacte et projet repris. Recette sur donnees fictives, pas de certification de fichiers metier prives.
 
 Finalite : preparation de classeurs de passation/signature/execution des marches publics selon un dictionnaire confirme. Aucune certification juridique ; source et decisions metier font autorite. Une intuition n'autorise pas une correction.
 
@@ -34,9 +36,12 @@ Profils JSON sans chemins personnels ; mappings reconfirmes. Projets SQLite cont
 - `checks.yml` : format, lint, tests Rust/React, oracle Python sur donnees fictives, verification Excel independante et Playwright.
 - `pages.yml` : frontend statique, donnees fictives, routage hash et assets locaux. Aucun traitement de fichiers personnels.
 - `windows-tauri.yml` : tests Windows, compilation release/NSIS, tests du vrai pont natif via WebDriver, parcours visuels, installation/desinstallation et artefacts verifies. Declenchement manuel.
+- `diagnostics.yml` : inspection des journaux synthetiques et essai natif rapide sur binaire mis en cache. Diagnostic uniquement, jamais qualification d'une release. Le cache release est sauvegarde avant les essais pour eviter les recompilations de dependances en cas d'echec du harnais.
 - `publish.yml` : publication sans reconstruire, uniquement pour un run Windows reussi et un commit ayant aussi passe checks. Tag exact obligatoire, manifeste et SHA verifies. Pas d'ecrasement d'une release existante.
 
 Les binaires sont telecharges manuellement par l'utilisateur. Ne jamais telecharger/installer/lancer une release sur son PC sans nouvelle demande. Aucun classeur prive sur les runners. Aucun chemin personnel, token ou journal sensible dans docs/issues. Le serveur de developpement Playwright existe uniquement dans la CI, jamais dans l'application distribuee.
+
+Piege CI Windows : WebView2 150+ ignore les arguments de debogage transmis par environnement depuis un processus eleve. `native_smoke.py` attache le pilote Microsoft correspondant au runtime a un port loopback, active une politique HKLM limitee au nom de l'executable sur le runner jetable et la restaure en sortie. Aucune option de debogage ajoutee au logiciel livre. `native_save_dialog.ps1` pilote le vrai dialogue via clavier : les controles peuvent etre exposes comme panes sans patterns UIA, et WM_SETTEXT seul ne met pas a jour le modele interne du dialogue. Ne pas remplacer `__TAURI_INTERNALS__.invoke`, protege en lecture seule par Tauri. Reference : https://github.com/MicrosoftEdge/WebView2Feedback/issues/5645.
 
 ## Reprise rapide
 

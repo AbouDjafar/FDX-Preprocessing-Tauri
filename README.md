@@ -6,7 +6,7 @@ FDX Atelier Tauri est une application Windows en français destinée aux équipe
 
 [Versions vérifiées](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases) · [Aperçu de l'interface](https://aboudjafar.github.io/FDX-Preprocessing-Tauri/) · [Guide utilisateur](docs/GUIDE-TAURI.md) · [Transmission](docs/TRANSMISSION-TAURI.md)
 
-**État : migration 2.0.0 en validation.** Une compilation réussie ne suffit pas à constituer une version finale : les contrôles métier, de conservation Excel et Windows doivent passer avant publication d'une release stable. L'aperçu Pages utilise des données fictives et ne traite aucun fichier personnel.
+**Version 2.0.0 disponible pour Windows x64.** Les [contrôles Rust et React](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359754161) et la [validation Windows complète](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359786062) ont réussi sur le même commit : tests métier, conservation Excel, parcours natif avec export réel, reprise de projet, installation et désinstallation. Ces contrôles utilisent des données fictives ; la validation métier des fichiers réels reste nécessaire. L'aperçu Pages utilise également des données fictives et ne traite aucun fichier personnel.
 
 ## Finalité métier
 
@@ -27,7 +27,7 @@ Les règles dépendent du dictionnaire et du processus de l'organisation utilisa
 
 Windows x64 avec WebView2. L'exécutable ne nécessite ni Python, ni Node, ni Rust, ni Microsoft Excel. L'ancienne application et cette version peuvent coexister.
 
-1. Télécharger manuellement l'installateur ou l'archive portable lorsqu'une [release vérifiée](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases) est disponible. Le portable utilise WebView2 déjà installé ; l'installateur vérifie sa présence et peut nécessiter Internet si ce composant manque.
+1. Télécharger manuellement l'[installateur Windows](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/download/v2.0.0/FDX-Atelier-Tauri-2.0.0-Windows-x64-installation.exe) ou l'[archive portable](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/download/v2.0.0/FDX-Atelier-Tauri-2.0.0-Windows-x64-portable.zip). Le portable utilise WebView2 déjà installé ; l'installateur vérifie sa présence et peut nécessiter Internet si ce composant manque. Le manifeste de construction et les empreintes SHA-256 sont disponibles dans la [release 2.0.0](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0).
 2. Lancer l'application et choisir **Essayer un exemple** pour découvrir le fonctionnement sur des données fictives.
 3. Pour un traitement métier, sélectionner un classeur `.xlsx` et son dictionnaire `.md` ou `.txt`, puis suivre les cinq étapes.
 
