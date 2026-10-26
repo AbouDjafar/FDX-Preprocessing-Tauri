@@ -52,14 +52,16 @@ jobs:
           key: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
           restore-keys: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
           fail-on-cache-miss: true
-      - name: Diagnose the cached native application
-        timeout-minutes: 6
+      - name: Prepare native test dependencies
         run: |
           Write-Output 'Diagnostic only. Release qualification still requires the full Windows workflow.'
           pip install -r scripts/oracle-requirements.txt
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/edge_driver.py qa/driver
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Diagnose the cached native application
+        timeout-minutes: 6
+        run: |
           python scripts/native_smoke.py target/release/fdx-atelier-tauri.exe qa/driver/msedgedriver.exe
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4

@@ -2,8 +2,13 @@
 import hashlib
 import json
 import os
+import socket
+import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -133,18 +138,44 @@ if __name__ == '__main__':
     environment['TAURI_WEBVIEW_AUTOMATION'] = 'true'
     environment['TAURI_AUTOMATION'] = 'true'
     environment['WEBVIEW2_USER_DATA_FOLDER'] = tempfile.mkdtemp(prefix='fdx-native-webview-')
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        debug_port = listener.getsockname()[1]
+    # Attach to a known loopback endpoint instead of relying on a shared
+    # DevToolsActivePort file. Debugging is enabled only in this test process.
+    environment['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
+        f'--remote-debugging-port={debug_port} --remote-debugging-address=127.0.0.1 --enable-automation'
+    )
     service = EdgeService(
         executable_path=str(Path(sys.argv[2]).resolve()),
         service_args=['--verbose'], log_output=str(destination / 'driver.log'), env=environment,
     )
     options = webdriver.EdgeOptions()
     options.use_webview = True
-    options.binary_location = str(Path(sys.argv[1]).resolve())
-    options.add_experimental_option('webviewOptions', {})
+    options.debugger_address = f'127.0.0.1:{debug_port}'
     driver = None
+    application = None
+    application_log = (destination / 'application.log').open('w', encoding='utf-8')
     try:
+        application = subprocess.Popen(
+            [str(Path(sys.argv[1]).resolve())], env=environment,
+            stdout=application_log, stderr=subprocess.STDOUT,
+        )
+        deadline = time.monotonic() + 45
+        while True:
+            if application.poll() is not None:
+                raise RuntimeError(f'Native application exited before WebView2 was ready: {application.returncode}')
+            try:
+                with urllib.request.urlopen(f'http://127.0.0.1:{debug_port}/json/version', timeout=1) as response:
+                    runtime = json.load(response)
+                (destination / 'runtime.json').write_text(json.dumps(runtime, indent=2), encoding='utf-8')
+                break
+            except (OSError, urllib.error.URLError):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Native WebView2 debugging endpoint did not become ready within 45 seconds')
+                time.sleep(0.25)
         service.start()
-        print('WebDriver ready; creating one native application session', flush=True)
+        print('Native WebView2 ready; attaching WebDriver to the running application', flush=True)
         driver = webdriver.Remote(
             command_executor=service.service_url, options=options,
             client_config=ClientConfig(service.service_url, timeout=60),
@@ -161,6 +192,12 @@ if __name__ == '__main__':
                 (destination / 'failure.html').write_text(driver.page_source[:200000], encoding='utf-8')
             except Exception:
                 pass
+        else:
+            try:
+                from PIL import ImageGrab
+                ImageGrab.grab().save(destination / 'native-startup-failure.png')
+            except Exception:
+                pass
         raise
     finally:
         if driver:
@@ -169,3 +206,6 @@ if __name__ == '__main__':
             except Exception:
                 pass
         service.stop()
+        if application and application.poll() is None:
+            subprocess.run(['taskkill', '/PID', str(application.pid), '/T', '/F'], capture_output=True, timeout=15)
+        application_log.close()
