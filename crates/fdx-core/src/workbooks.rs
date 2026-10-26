@@ -260,7 +260,7 @@ impl Xml {
         let mut events = 0usize;
         loop {
             events += 1;
-            if events % 4096 == 0 {
+            if events.is_multiple_of(4096) {
                 job.check()?;
             }
             let start = reader.buffer_position() as usize;
@@ -1106,7 +1106,7 @@ pub(crate) fn encode_excel_text(value: &str) -> String {
 pub(crate) fn serial_date(raw: &str, date1904: bool) -> Option<String> {
     let number = number(raw).ok()?;
     let serial = number.to_i64()?;
-    if number != BigDecimal::from(serial)
+    if number != serial
         || !(0..=2_958_465).contains(&serial)
         || (!date1904 && serial == 60)
     {

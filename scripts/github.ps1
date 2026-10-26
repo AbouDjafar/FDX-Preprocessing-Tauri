@@ -18,6 +18,8 @@ try {
         Uri = "https://api.github.com$Route"
         Method = $Method
         Headers = @{Authorization = "Bearer $($values.password)"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'}
+        ConnectionTimeoutSeconds = 30
+        OperationTimeoutSeconds = 60
     }
     if ($null -ne $Body) {
         $arguments.ContentType = 'application/json'

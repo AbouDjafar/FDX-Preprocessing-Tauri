@@ -1,5 +1,4 @@
 use crate::{engine, models::*, workbooks::*};
-use bigdecimal::BigDecimal;
 use chrono::{Datelike, NaiveDate};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -23,8 +22,7 @@ pub fn remove_grouping(format: &str) -> String {
             && tokens[i + 1..].iter().take_while(|t| digit(t)).count() > 0
             && tokens[i + 1..]
                 .iter()
-                .skip_while(|t| digit(t))
-                .next()
+                .find(|t| !digit(t))
                 .is_some_and(|t| t == "/");
         if !grouped || fraction {
             output.push_str(token);
@@ -139,7 +137,7 @@ fn export_precision(value: &CellValue) -> Result<()> {
         let (coefficient, exponent) = n.as_bigint_and_exponent();
         let digits = coefficient.to_string().trim_start_matches('-').len();
         let magnitude = digits as i64 - exponent - 1;
-        if n != BigDecimal::from(0) && (digits > 15 || !(-307..=307).contains(&magnitude)) {
+        if n != 0 && (digits > 15 || !(-307..=307).contains(&magnitude)) {
             return Err(error("Precision non representable de facon fiable dans Excel (15 chiffres significatifs). Conservez la valeur en texte."));
         }
     }
@@ -543,10 +541,9 @@ fn write_sheet(
             } else if matches!(value.kind.as_str(), "integer" | "decimal")
                 && (!date_format(&previous)
                     || number(&value.value).is_ok_and(|n| {
-                        n < BigDecimal::from(0)
-                            || n > BigDecimal::from(2_958_465)
-                            || (n.normalized().as_bigint_and_exponent().1 <= 0
-                                && n > BigDecimal::from(60))
+                        n < 0
+                            || n > 2_958_465
+                            || (n.normalized().as_bigint_and_exponent().1 <= 0 && n > 60)
                     }))
             {
                 let code = numeric_format(&value.value, &previous)?;
@@ -1153,6 +1150,8 @@ fn verify_sheet_structure(before: &[u8], after: &[u8], job: &JobControl) -> Resu
     Ok(())
 }
 
+// Keep the original, expected and reopened data explicit for independent export verification.
+#[allow(clippy::too_many_arguments)]
 fn verify(
     package: &Package,
     actual: &Package,
