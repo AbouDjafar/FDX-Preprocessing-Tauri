@@ -42,6 +42,7 @@ test('rules and review controls fit the display, DPR and logical zoom', async ({
   await page.getByRole('button', { name: 'Enregistrer et définir les règles', exact: true }).click();
 
   await page.getByRole('button', { name: 'Avancé', exact: true }).click();
+  await expect(page.getByLabel('Champ métier', { exact: true })).toHaveAccessibleName('Champ métier');
   await page.getByLabel('Champ métier', { exact: true }).selectOption('TELEPHONE');
   await page.evaluate(async () => { await document.fonts.ready; });
   await usableControl(page.getByRole('button', { name: 'Charger un profil', exact: true }), page);
@@ -68,6 +69,7 @@ test('rules and review controls fit the display, DPR and logical zoom', async ({
   await page.screenshot({ path: info.outputPath('review-decision-control.png') });
   await decide.click();
   const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Décision', { exact: true })).toHaveAccessibleName('Décision');
   await usableControl(dialog.getByLabel('Décision', { exact: true }), page);
   await usableControl(dialog.getByRole('button', { name: 'Ajouter la décision au lot', exact: true }), page);
   await page.screenshot({ path: info.outputPath('review-decision-dialog.png') });

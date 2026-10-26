@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { cloneElement, useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Info, X, type LucideIcon } from 'lucide-react';
 
 export function Button({ icon: Icon, children, primary, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon; primary?: boolean }) {
@@ -7,11 +7,17 @@ export function Button({ icon: Icon, children, primary, className = '', ...props
 export function IconButton({ icon: Icon, label, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
   return <span className="tooltip-wrap"><button type="button" {...props} className={`btn icon-btn ${props.className || ''}`} aria-label={label} title={label}><Icon size={17} aria-hidden="true" /></button><span className="tooltip" role="tooltip">{label}</span></span>;
 }
-export function Field({ label, children, hint, className = '' }: { label: string; children: ReactNode; hint?: string; className?: string }) {
-  return <label className={`field ${className}`}><span className="field-label">{label}</span>{children}{hint && <span className="field-hint">{hint}</span>}</label>;
+export function Field({ label, children, hint, className = '' }: { label: string; children: ReactElement<{ id?: string; 'aria-describedby'?: string }>; hint?: string; className?: string }) {
+  const id = useId();
+  const controlId = children.props.id || id;
+  const hintId = `${id}-hint`;
+  const describedBy = [children.props['aria-describedby'], hint ? hintId : undefined].filter(Boolean).join(' ') || undefined;
+  return <div className={`field ${className}`}><label className="field-label" htmlFor={controlId}>{label}</label>{cloneElement(children, { id: controlId, 'aria-describedby': describedBy })}{hint && <span id={hintId} className="field-hint">{hint}</span>}</div>;
 }
 export function Toggle({ label, checked, onChange, disabled, hint }: { label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; hint?: string }) {
-  return <label className="switch-row"><span><strong>{label}</strong>{hint && <span className="field-hint">{hint}</span>}</span><input className="toggle" type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} /></label>;
+  const id = useId();
+  const hintId = `${id}-hint`;
+  return <div className="switch-row"><span><label htmlFor={id}><strong>{label}</strong></label>{hint && <span id={hintId} className="field-hint">{hint}</span>}</span><input id={id} aria-describedby={hint ? hintId : undefined} className="toggle" type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} /></div>;
 }
 export function Notice({ children, warm = false }: { children: ReactNode; warm?: boolean }) {
   return <div className={`notice ${warm ? 'warm' : ''}`}><Info size={17} aria-hidden="true" /><div>{children}</div></div>;
