@@ -16,8 +16,16 @@ $deadline = [DateTime]::UtcNow.AddSeconds(30)
 while ([DateTime]::UtcNow -lt $deadline) {
     $dialog = $automation::RootElement.FindFirst($scope,$condition)
     if ($null -ne $dialog) {
-        $fileName = $dialog.FindFirst($scope,(New-Object System.Windows.Automation.PropertyCondition $automation::AutomationIdProperty,'1001'))
-        $save = $dialog.FindFirst($scope,(New-Object System.Windows.Automation.PropertyCondition $automation::AutomationIdProperty,'1'))
+        $nameCondition = New-Object System.Windows.Automation.AndCondition @(
+            (New-Object System.Windows.Automation.PropertyCondition $automation::AutomationIdProperty,'1001'),
+            (New-Object System.Windows.Automation.PropertyCondition $automation::ControlTypeProperty,([System.Windows.Automation.ControlType]::Edit))
+        )
+        $saveCondition = New-Object System.Windows.Automation.AndCondition @(
+            (New-Object System.Windows.Automation.PropertyCondition $automation::AutomationIdProperty,'1'),
+            (New-Object System.Windows.Automation.PropertyCondition $automation::ControlTypeProperty,([System.Windows.Automation.ControlType]::Button))
+        )
+        $fileName = $dialog.FindFirst($scope,$nameCondition)
+        $save = $dialog.FindFirst($scope,$saveCondition)
         if ($null -ne $fileName -and $null -ne $save) {
             $value = $fileName.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
             $value.SetValue($Destination)
