@@ -71,8 +71,13 @@ jobs:
         run: |
           cargo install tauri-driver --locked
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          tauri-driver --help
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/edge_driver.py qa/driver
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Install, verify and uninstall on runner
+        timeout-minutes: 5
+        run: .\scripts\verify_tauri_windows.ps1
       - name: Native application end-to-end
         timeout-minutes: 6
         run: python scripts/native_smoke.py target/release/fdx-atelier-tauri.exe qa/driver/msedgedriver.exe
@@ -83,8 +88,6 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm run test:e2e
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Install, verify and uninstall on runner
-        run: .\scripts\verify_tauri_windows.ps1
       - name: Package verified assets without rebuilding
         run: .\scripts\package_tauri.ps1
       - uses: actions/upload-artifact@v4

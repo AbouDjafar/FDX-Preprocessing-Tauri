@@ -20,7 +20,9 @@ from selenium.webdriver.support import expected_conditions as EC
 
 class TauriOptions(webdriver.ChromeOptions):
     def to_capabilities(self):
-        return {'tauri:options': {'application': str(Path(sys.argv[1]).resolve())}}
+        return {'browserName': 'wry', 'tauri:options': {
+            'application': str(Path(sys.argv[1]).resolve()), 'webviewOptions': {},
+        }}
 
 
 def call(driver, op, payload=None, session=None, fail=False):
