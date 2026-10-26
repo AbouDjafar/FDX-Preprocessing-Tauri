@@ -98,7 +98,7 @@ def check(driver, folder, application_id):
     ui_output = folder / 'resultat interface.xlsx'
     # Drive the real Windows file picker without replacing the protected IPC bridge.
     with subprocess.Popen(
-        ['powershell', '-NoProfile', '-File', str(Path(__file__).with_name('native_save_dialog.ps1').resolve()),
+        ['powershell', '-NoProfile', '-STA', '-File', str(Path(__file__).with_name('native_save_dialog.ps1').resolve()),
          '-ApplicationId', str(application_id), '-Destination', str(ui_output)],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     ) as picker:

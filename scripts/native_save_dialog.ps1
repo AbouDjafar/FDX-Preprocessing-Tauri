@@ -6,15 +6,14 @@ $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Native UI verification is restricted to GitHub Actions.' }
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Windows.Forms
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
 public static class FdxNativePicker {
-    [DllImport("user32.dll", EntryPoint="SendMessageW", CharSet=CharSet.Unicode)]
-    public static extern IntPtr SetText(IntPtr window, uint message, UIntPtr parameter, string text);
-    [DllImport("user32.dll", EntryPoint="SendMessageW")]
-    public static extern IntPtr Click(IntPtr window, uint message, UIntPtr parameter, IntPtr data);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr window);
     private delegate bool EnumChild(IntPtr window, IntPtr data);
     [DllImport("user32.dll")]
     private static extern bool EnumChildWindows(IntPtr parent, EnumChild callback, IntPtr data);
@@ -74,12 +73,17 @@ while ([DateTime]::UtcNow -lt $deadline) {
             if ($nameHandle -eq [IntPtr]::Zero -or $saveHandle -eq [IntPtr]::Zero) { throw 'Native file picker control handles are unavailable.' }
             $editHandle = [FdxNativePicker]::FindEdit($nameHandle)
             if ($editHandle -eq [IntPtr]::Zero) { throw ('Filename editor unavailable in ' + [FdxNativePicker]::ClassName($nameHandle)) }
-            # WM_SETTEXT and BM_CLICK also work when Windows exposes legacy
-            # common-dialog controls as panes without UIA Value/Invoke patterns.
-            $set = [FdxNativePicker]::SetText($editHandle,0x000C,[UIntPtr]::Zero,$Destination)
-            if ($set -eq [IntPtr]::Zero) { throw 'Windows rejected the output filename.' }
+            # Shell dialogs keep an internal filename model: WM_SETTEXT alone
+            # can change the display without updating the path returned by Save.
+            [void][FdxNativePicker]::SetForegroundWindow([IntPtr]::new([long]$dialog.Current.NativeWindowHandle))
+            Start-Sleep -Milliseconds 100
+            [System.Windows.Forms.SendKeys]::SendWait('%n')
+            [System.Windows.Forms.SendKeys]::SendWait('^a')
+            [System.Windows.Forms.Clipboard]::SetText($Destination)
+            [System.Windows.Forms.SendKeys]::SendWait('^v')
+            Start-Sleep -Milliseconds 250
             if ([FdxNativePicker]::Text($editHandle) -ne $Destination) { throw 'Windows did not retain the requested output filename.' }
-            [void][FdxNativePicker]::Click($saveHandle,0x00F5,[UIntPtr]::Zero,[IntPtr]::Zero)
+            [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
             Write-Output 'Native Windows save-file picker completed.'
             exit 0
         }
