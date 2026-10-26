@@ -65,7 +65,7 @@ def startup_diagnostics(folder):
     print(result.stdout[-10000:] + result.stderr[-3000:], flush=True)
 
 
-def check(driver, folder):
+def check(driver, folder, application_id):
     wait = WebDriverWait(driver, 30)
     wait.until(lambda d: 'FDX' in d.find_element(By.TAG_NAME, 'body').text)
     assert driver.execute_script('return getComputedStyle(document.body).backgroundColor') != 'rgb(255, 255, 255)'
@@ -96,19 +96,16 @@ def check(driver, folder):
     driver.find_element(By.CSS_SELECTOR, '[data-testid="stage-export"]').click()
     wait.until(EC.visibility_of_element_located((By.XPATH, '//label[contains(., "J’autorise l’export avec les anomalies restantes")]/input'))).click()
     ui_output = folder / 'resultat interface.xlsx'
-    # Substitute only the OS file picker; all application commands and Excel work remain native.
-    driver.execute_script('''
-      const original = window.__TAURI_INTERNALS__.invoke;
-      const destination = arguments[0];
-      window.__TAURI_INTERNALS__.invoke = (command, args, options) => {
-        if (command === 'plugin:dialog|save') {
-          window.__TAURI_INTERNALS__.invoke = original;
-          return Promise.resolve(destination);
-        }
-        return original(command, args, options);
-      };
-    ''', str(ui_output))
-    driver.find_element(By.CSS_SELECTOR, '[data-testid="export-button"]').click()
+    # Drive the real Windows file picker without replacing the protected IPC bridge.
+    with subprocess.Popen(
+        ['powershell', '-NoProfile', '-File', str(Path(__file__).with_name('native_save_dialog.ps1').resolve()),
+         '-ApplicationId', str(application_id), '-Destination', str(ui_output)],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    ) as picker:
+        driver.find_element(By.CSS_SELECTOR, '[data-testid="export-button"]').click()
+        picker_log, _ = picker.communicate(timeout=40)
+        (folder / 'file-picker.log').write_text(picker_log, encoding='utf-8')
+        assert picker.returncode == 0, picker_log
     wait.until(EC.element_to_be_clickable((By.XPATH, '//dialog//button[normalize-space()="Exporter et vérifier"]'))).click()
     wait.until(lambda _: ui_output.exists())
     ui_book = load_workbook(ui_output)
@@ -233,7 +230,7 @@ if __name__ == '__main__':
         )
         print('Native application session created', flush=True)
         driver.set_script_timeout(45)
-        report = check(driver, destination.resolve())
+        report = check(driver, destination.resolve(), application.pid)
         (destination / 'verification.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
         print(json.dumps(report))
     except BaseException:
