@@ -37,6 +37,34 @@ def call(driver, op, payload=None, session=None, fail=False):
     return response['value']
 
 
+def startup_diagnostics(folder):
+    script = r'''
+      $ErrorActionPreference = 'Continue'
+      Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'fdx|msedge|WebView' } |
+        Select-Object Name,ProcessId,ParentProcessId,SessionId,CommandLine | ConvertTo-Json -Depth 3
+      Get-Process | Where-Object { $_.ProcessName -match 'fdx|msedge|WebView' } |
+        Select-Object Id,ProcessName,MainWindowTitle,MainWindowHandle,Responding | Format-List | Out-String
+      try {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $bitmap = New-Object System.Drawing.Bitmap $bounds.Width,$bounds.Height
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen($bounds.X,$bounds.Y,0,0,$bounds.Size)
+        $bitmap.Save((Join-Path $env:FDX_NATIVE_DIAGNOSTICS_DIR 'native-startup-failure.png'))
+        $graphics.Dispose()
+        $bitmap.Dispose()
+      } catch { Write-Output $_ }
+    '''
+    result = subprocess.run(
+        ['powershell', '-NoProfile', '-Command', script],
+        capture_output=True, text=True, timeout=20,
+        env={**os.environ, 'FDX_NATIVE_DIAGNOSTICS_DIR': str(folder.resolve())},
+    )
+    (folder / 'startup-diagnostics.txt').write_text(result.stdout + result.stderr, encoding='utf-8')
+    print(result.stdout[-10000:] + result.stderr[-3000:], flush=True)
+
+
 def check(driver, folder):
     wait = WebDriverWait(driver, 30)
     wait.until(lambda d: 'FDX' in d.find_element(By.TAG_NAME, 'body').text)
@@ -154,6 +182,7 @@ if __name__ == '__main__':
     options.use_webview = True
     options.debugger_address = f'127.0.0.1:{debug_port}'
     driver = None
+    service_started = False
     application = None
     application_log = (destination / 'application.log').open('w', encoding='utf-8')
     try:
@@ -175,6 +204,7 @@ if __name__ == '__main__':
                     raise RuntimeError('Native WebView2 debugging endpoint did not become ready within 45 seconds')
                 time.sleep(0.25)
         service.start()
+        service_started = True
         print('Native WebView2 ready; attaching WebDriver to the running application', flush=True)
         driver = webdriver.Remote(
             command_executor=service.service_url, options=options,
@@ -194,10 +224,9 @@ if __name__ == '__main__':
                 pass
         else:
             try:
-                from PIL import ImageGrab
-                ImageGrab.grab().save(destination / 'native-startup-failure.png')
-            except Exception:
-                pass
+                startup_diagnostics(destination)
+            except Exception as diagnostic_error:
+                print(f'Startup diagnostics unavailable: {diagnostic_error}', flush=True)
         raise
     finally:
         if driver:
@@ -205,7 +234,8 @@ if __name__ == '__main__':
                 driver.quit()
             except Exception:
                 pass
-        service.stop()
+        if service_started:
+            service.stop()
         if application and application.poll() is None:
             subprocess.run(['taskkill', '/PID', str(application.pid), '/T', '/F'], capture_output=True, timeout=15)
         application_log.close()
