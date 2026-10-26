@@ -492,6 +492,7 @@ pub fn manual_value(
     Ok(value)
 }
 
+#[allow(clippy::too_many_arguments)] // Keep source coordinates and finding values explicit.
 fn finding(
     sheet: &str,
     row: u32,
@@ -705,7 +706,7 @@ fn validate_prepared(
             ("maximum", &field.maximum, false),
         ] {
             if let Some(bound) = bound {
-                if number.as_ref().map_or(true, |number| {
+                if number.as_ref().is_none_or(|number| {
                     if lower {
                         number < bound
                     } else {
@@ -725,6 +726,7 @@ fn validate_prepared(
     findings
 }
 
+#[allow(clippy::too_many_arguments)] // Preserve the validation API and explicit source coordinates.
 pub fn validate_cell(
     sheet: &str,
     row: u32,
@@ -1108,7 +1110,7 @@ pub fn analyze(
             }
         }
         let processed = row - config.header_row;
-        if processed % 100 == 0 || processed == result.row_count {
+        if processed.is_multiple_of(100) || processed == result.row_count {
             job.report(
                 "analyze",
                 u64::from(processed),
