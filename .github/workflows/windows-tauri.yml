@@ -74,6 +74,7 @@ jobs:
           python scripts/edge_driver.py qa/driver
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Native application end-to-end
+        timeout-minutes: 6
         run: python scripts/native_smoke.py target/release/fdx-atelier-tauri.exe qa/driver/msedgedriver.exe
       - name: Frontend visual scenarios
         working-directory: web

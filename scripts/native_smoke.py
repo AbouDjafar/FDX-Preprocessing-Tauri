@@ -5,12 +5,15 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 
 from openpyxl import load_workbook
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.client_config import ClientConfig
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -42,6 +45,7 @@ def check(driver, folder):
     assert driver.execute_script('return getComputedStyle(document.body).backgroundColor') != 'rgb(255, 255, 255)'
     driver.set_window_size(1366, 768)
     wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="try-demo"]')))
+    print('Native interface ready', flush=True)
     driver.save_screenshot(str(folder / 'native-start.png'))
     driver.find_element(By.CSS_SELECTOR, '[data-testid="try-demo"]').click()
     wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="stage-association"]'))).click()
@@ -53,6 +57,7 @@ def check(driver, folder):
     wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(., "Confirmer et analyser toutes les lignes")]'))).click()
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '[data-testid="finding"]')))
     driver.save_screenshot(str(folder / 'native-review.png'))
+    print('Native analysis ready', flush=True)
     assert not driver.find_elements(By.CSS_SELECTOR, '[data-testid="global-error"]')
     finding = driver.find_elements(By.CSS_SELECTOR, '[data-testid="finding"]')[0]
     assert 'phone_multiple' in finding.text
@@ -86,6 +91,7 @@ def check(driver, folder):
     ui_book.close()
     wait.until(EC.element_to_be_clickable((By.XPATH, '//button[normalize-space()="Ouvrir le classeur"]')))
     driver.save_screenshot(str(folder / 'native-export.png'))
+    print('Native UI export reopened and verified', flush=True)
     session = call(driver, 'demo')
     source = Path(session['config']['source_path'])
     baseline = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -123,6 +129,7 @@ def check(driver, folder):
     assert restored['dirty'] is True
     restored = call(driver, 'analyze', session=restored)
     assert restored['summary']['findings'] == session['summary']['findings']
+    print('Native project reopened and verified', flush=True)
     return {'ok': True, 'rows': 3, 'native_ui': True, 'native_ui_export': True, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True}
 
 
@@ -134,20 +141,41 @@ if __name__ == '__main__':
     driver = None
     try:
         for attempt in range(30):
+            if server.poll() is not None:
+                raise RuntimeError('tauri-driver exited before becoming ready; inspect driver.log')
             try:
-                driver = webdriver.Remote(command_executor='http://127.0.0.1:4444', options=TauriOptions())
-                break
-            except Exception:
-                if server.poll() is not None or attempt == 29:
-                    raise
-                time.sleep(1)
-        driver.set_script_timeout(120)
+                with urllib.request.urlopen('http://127.0.0.1:4444/status', timeout=2) as response:
+                    if json.load(response).get('value', {}).get('ready'):
+                        break
+            except (OSError, urllib.error.URLError, json.JSONDecodeError):
+                pass
+            time.sleep(1)
+        else:
+            raise RuntimeError('WebDriver did not become ready; inspect driver.log')
+        print('WebDriver ready; creating one native application session', flush=True)
+        driver = webdriver.Remote(
+            command_executor='http://127.0.0.1:4444', options=TauriOptions(),
+            client_config=ClientConfig('http://127.0.0.1:4444', timeout=60),
+        )
+        print('Native application session created', flush=True)
+        driver.set_script_timeout(45)
         report = check(driver, destination.resolve())
         (destination / 'verification.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
         print(json.dumps(report))
+    except BaseException:
+        if driver:
+            try:
+                driver.save_screenshot(str(destination / 'native-failure.png'))
+                (destination / 'failure.html').write_text(driver.page_source[:200000], encoding='utf-8')
+            except Exception:
+                pass
+        raise
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+            except Exception:
+                pass
         server.terminate()
         try:
             server.wait(timeout=10)

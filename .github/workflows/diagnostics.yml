@@ -1,0 +1,30 @@
+name: Inspect synthetic Windows test diagnostics
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Windows verification run to inspect
+        required: true
+permissions:
+  actions: read
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read driver diagnostics on GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'windows-verification-*' --dir diagnostics
+          python - <<'PY'
+          from pathlib import Path
+          logs = list(Path('diagnostics').rglob('driver.log'))
+          if not logs:
+              raise SystemExit('No driver log in this synthetic verification run')
+          for path in logs:
+              print(path.read_text(encoding='utf-8', errors='replace')[-30000:])
+          PY
