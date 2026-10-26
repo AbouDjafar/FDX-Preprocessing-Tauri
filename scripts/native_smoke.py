@@ -1,28 +1,19 @@
 """Exercise the shipped Windows binary over its real Tauri bridge, never a mock."""
 import hashlib
 import json
-import subprocess
+import os
 import sys
 import tempfile
-import time
-import urllib.error
-import urllib.request
 import uuid
 from pathlib import Path
 
 from openpyxl import load_workbook
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.remote.client_config import ClientConfig
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
-
-class TauriOptions(webdriver.ChromeOptions):
-    def to_capabilities(self):
-        return {'browserName': 'wry', 'tauri:options': {
-            'application': str(Path(sys.argv[1]).resolve()), 'webviewOptions': {},
-        }}
 
 
 def call(driver, op, payload=None, session=None, fail=False):
@@ -138,26 +129,25 @@ def check(driver, folder):
 if __name__ == '__main__':
     destination = Path('qa/native')
     destination.mkdir(parents=True, exist_ok=True)
-    log = (destination / 'driver.log').open('w', encoding='utf-8')
-    server = subprocess.Popen(['tauri-driver', '--native-driver', str(Path(sys.argv[2]).resolve())], stdout=log, stderr=subprocess.STDOUT)
+    environment = os.environ.copy()
+    environment['TAURI_WEBVIEW_AUTOMATION'] = 'true'
+    environment['TAURI_AUTOMATION'] = 'true'
+    environment['WEBVIEW2_USER_DATA_FOLDER'] = tempfile.mkdtemp(prefix='fdx-native-webview-')
+    service = EdgeService(
+        executable_path=str(Path(sys.argv[2]).resolve()),
+        service_args=['--verbose'], log_output=str(destination / 'driver.log'), env=environment,
+    )
+    options = webdriver.EdgeOptions()
+    options.use_webview = True
+    options.binary_location = str(Path(sys.argv[1]).resolve())
+    options.add_experimental_option('webviewOptions', {})
     driver = None
     try:
-        for attempt in range(30):
-            if server.poll() is not None:
-                raise RuntimeError('tauri-driver exited before becoming ready; inspect driver.log')
-            try:
-                with urllib.request.urlopen('http://127.0.0.1:4444/status', timeout=2) as response:
-                    if json.load(response).get('value', {}).get('ready'):
-                        break
-            except (OSError, urllib.error.URLError, json.JSONDecodeError):
-                pass
-            time.sleep(1)
-        else:
-            raise RuntimeError('WebDriver did not become ready; inspect driver.log')
+        service.start()
         print('WebDriver ready; creating one native application session', flush=True)
         driver = webdriver.Remote(
-            command_executor='http://127.0.0.1:4444', options=TauriOptions(),
-            client_config=ClientConfig('http://127.0.0.1:4444', timeout=60),
+            command_executor=service.service_url, options=options,
+            client_config=ClientConfig(service.service_url, timeout=60),
         )
         print('Native application session created', flush=True)
         driver.set_script_timeout(45)
@@ -178,9 +168,4 @@ if __name__ == '__main__':
                 driver.quit()
             except Exception:
                 pass
-        server.terminate()
-        try:
-            server.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            server.kill()
-        log.close()
+        service.stop()

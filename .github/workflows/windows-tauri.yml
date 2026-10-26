@@ -56,11 +56,22 @@ jobs:
           $testsFailed = $LASTEXITCODE
           cargo clippy --locked --workspace --all-targets -- -D warnings
           if ($LASTEXITCODE -or $testsFailed) { exit 1 }
+      - uses: actions/cache/restore@v4
+        id: release_cache
+        with:
+          path: target/release
+          key: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
       - name: Build release and NSIS installer
         working-directory: src-tauri
         run: |
           ..\web\node_modules\.bin\tauri.cmd build --ci -- --locked
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/cache/save@v4
+        if: steps.release_cache.outputs.cache-hit != 'true'
+        with:
+          path: target/release
+          key: ${{ steps.release_cache.outputs.cache-primary-key }}
       - name: Build CLI and run independent conservation checks
         run: |
           cargo build --locked --release -p fdx-cli
@@ -69,10 +80,6 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Install WebDriver on runner
         run: |
-          cargo install tauri-driver --locked
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          tauri-driver --help
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/edge_driver.py qa/driver
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Install, verify and uninstall on runner

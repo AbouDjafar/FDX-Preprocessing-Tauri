@@ -4,12 +4,17 @@ on:
     inputs:
       run_id:
         description: Windows verification run to inspect
-        required: true
+        required: false
+      probe_native:
+        description: Test the cached application with the current native test harness
+        type: boolean
+        default: false
 permissions:
   actions: read
   contents: read
 jobs:
   inspect:
+    if: ${{ !inputs.probe_native }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -28,3 +33,37 @@ jobs:
           for path in logs:
               print(path.read_text(encoding='utf-8', errors='replace')[-30000:])
           PY
+  probe:
+    if: inputs.probe_native
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/oracle-requirements.txt
+      - uses: actions/cache/restore@v4
+        with:
+          path: target/release
+          key: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
+          fail-on-cache-miss: true
+      - name: Diagnose the cached native application
+        timeout-minutes: 6
+        run: |
+          Write-Output 'Diagnostic only. Release qualification still requires the full Windows workflow.'
+          pip install -r scripts/oracle-requirements.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/edge_driver.py qa/driver
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/native_smoke.py target/release/fdx-atelier-tauri.exe qa/driver/msedgedriver.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-probe-diagnostics
+          path: qa/native/
