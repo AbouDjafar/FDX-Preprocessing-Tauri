@@ -20,6 +20,83 @@ const MAX_PART: u64 = 256 * 1024 * 1024;
 const MAX_TOTAL: u64 = 1_000_000_000;
 const MAX_ENTRIES: usize = 20_000;
 const MAX_NODES: usize = 6_000_000;
+const CONTENT_NS: &str = "http://schemas.openxmlformats.org/package/2006/content-types";
+const WORKBOOK_CONTENT: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+const TEMPLATE_CONTENT: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml";
+const WORKBOOK_RECOVERY: &str = "Ouvrez une copie dans Excel ou LibreOffice, reparez le classeur si necessaire, puis enregistrez, fermez et rechargez cette copie. Verifiez les donnees et objets conserves avant toute conversion ; ne renommez pas seulement l'extension. La source reste intacte.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkbookFormat {
+    Workbook,
+    Template,
+}
+
+impl WorkbookFormat {
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::Workbook => "xlsx",
+            Self::Template => "xltx",
+        }
+    }
+
+    fn from_path(path: &Path) -> Result<Self> {
+        let suffix = path
+            .extension()
+            .and_then(|v| v.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        match suffix.as_str() {
+            "xlsx" => Ok(Self::Workbook),
+            "xltx" => Ok(Self::Template),
+            "xlsm" | "xltm" | "xlam" => Err(error("Format avec macros non pris en charge : la conservation du projet VBA n'est pas garantie par cet exporteur. Aucune macro n'est executee. Conservez l'original ; ne creez une copie .xlsx sans macros dans Excel ou LibreOffice que si leur suppression est explicitement acceptable, puis rechargez cette copie.")),
+            "xls" | "xlsb" | "xlt" | "xla" => Err(error("Format Excel binaire non pris en charge par l'exporteur conservateur. Dans Excel ou LibreOffice, enregistrez une copie en .xlsx, verifiez qu'aucune donnee, macro ou objet utile n'est perdu, puis rechargez cette copie. Conservez l'original ; aucune conversion automatique n'est effectuee.")),
+            _ => Err(error("Format non pris en charge. Seuls les classeurs .xlsx et modeles .xltx OOXML non chiffres et conservables sont acceptes. Dans Excel ou LibreOffice, enregistrez une copie en .xlsx, verifiez les donnees et objets conserves, puis rechargez-la. Conservez l'original ; renommer l'extension ne convertit pas un fichier.")),
+        }
+    }
+}
+
+pub(crate) fn source_error(path: &Path, cause: FdxError) -> FdxError {
+    if matches!(cause, FdxError::Cancelled) {
+        return cause;
+    }
+    let name = path
+        .file_name()
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy();
+    let action = match &cause {
+        FdxError::Io(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            "Fichier introuvable : verifiez son emplacement et selectionnez-le de nouveau."
+        }
+        FdxError::Io(e)
+            if e.kind() == std::io::ErrorKind::PermissionDenied
+                || (cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33))) =>
+        {
+            "Fichier verrouille ou acces refuse : fermez-le dans Excel ou LibreOffice, verifiez les droits de lecture, puis rechargez-le."
+        }
+        _ => WORKBOOK_RECOVERY,
+    };
+    error(format!("Lecture du classeur '{name}' impossible : {cause} {action}"))
+}
+
+pub(crate) fn read_source_package(path: &Path, job: &JobControl) -> Result<(Vec<u8>, Package)> {
+    job.check()?;
+    let expected = WorkbookFormat::from_path(path)?;
+    let read = || {
+        let bytes = read_bounded(path, MAX_FILE, job)?;
+        let package = Package::from_bytes(&bytes, job)?;
+        let actual = package.format(job)?;
+        if actual != expected {
+            return Err(error(format!(
+                "Extension et contenu incompatibles : le paquet est de type .{}, pas .{}. Utilisez Enregistrer sous dans Excel ou LibreOffice pour creer une copie au format voulu.",
+                actual.suffix(), expected.suffix()
+            )));
+        }
+        Ok((bytes, package))
+    };
+    read().map_err(|e| source_error(path, e))
+}
 
 pub(crate) fn io_error(context: &str, e: impl std::fmt::Display) -> FdxError {
     error(format!("{context} : {e}"))
@@ -509,6 +586,9 @@ pub(crate) struct Package {
 impl Package {
     pub fn from_bytes(bytes: &[u8], job: &JobControl) -> Result<Self> {
         job.check()?;
+        if bytes.starts_with(&[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) {
+            return Err(error("Conteneur Excel binaire ou chiffre non pris en charge. Ouvrez une copie dans Excel ou LibreOffice avec le mot de passe si necessaire, retirez le chiffrement sur cette copie et enregistrez-la au format .xlsx avant de la recharger. Verifiez toute perte de macros ou d'objets ; conservez l'original."));
+        }
         if bytes.len() as u64 > MAX_FILE {
             return Err(error("Classeur compresse trop volumineux (256 Mio)."));
         }
@@ -635,7 +715,7 @@ impl Package {
                         .iter()
                         .any(|v| kind.contains(v))
                         {
-                            return Err(error("Type de contenu Excel non pris en charge."));
+                            return Err(error("Type de contenu Excel non pris en charge (macros VBA, objets actifs ou donnees non conservables). Aucune conversion ou suppression implicite n'est autorisee."));
                         }
                     }
                 }
@@ -652,7 +732,64 @@ impl Package {
             package.get(name)?;
         }
         package.validate_relationships(job)?;
+        package.format(job)?;
         Ok(package)
+    }
+
+    fn workbook_type_node(&self, job: &JobControl) -> Result<(Xml, usize)> {
+        let xml = Xml::parse(self.get("[Content_Types].xml")?, job)?;
+        let id = {
+            let root = &xml.nodes[xml.root];
+            let namespace = |node: &Node| {
+                let key = node.name.rsplit_once(':').map_or_else(
+                    || "xmlns".to_owned(),
+                    |(prefix, _)| format!("xmlns:{prefix}"),
+                );
+                node.attr(&key).or_else(|| root.attr(&key)) == Some(CONTENT_NS)
+            };
+            if root.local() != "Types" || !namespace(root) {
+                return Err(error("Manifeste de types de contenu Excel invalide."));
+            }
+            let mut matches = xml
+                .children(xml.root, "Override")
+                .filter(|id| xml.nodes[*id].attr("PartName") == Some("/xl/workbook.xml"));
+            let id = matches
+                .next()
+                .ok_or_else(|| error("Type de contenu du classeur absent."))?;
+            if matches.next().is_some() || !namespace(&xml.nodes[id]) {
+                return Err(error("Type de contenu du classeur duplique ou invalide."));
+            }
+            id
+        };
+        Ok((xml, id))
+    }
+
+    pub fn format(&self, job: &JobControl) -> Result<WorkbookFormat> {
+        let (xml, id) = self.workbook_type_node(job)?;
+        match xml.nodes[id].required("ContentType")? {
+            WORKBOOK_CONTENT => Ok(WorkbookFormat::Workbook),
+            TEMPLATE_CONTENT => Ok(WorkbookFormat::Template),
+            _ => Err(error("Type de classeur OOXML non pris en charge ; seuls .xlsx et .xltx sans macros sont conservables.")),
+        }
+    }
+
+    pub fn normalize_workbook_type(&mut self, job: &JobControl) -> Result<()> {
+        if self.format(job)? == WorkbookFormat::Workbook {
+            return Ok(());
+        }
+        let (xml, id) = self.workbook_type_node(job)?;
+        let node = &xml.nodes[id];
+        let bytes = patch(
+            self.get("[Content_Types].xml")?,
+            vec![(
+                node.start,
+                node.open_end,
+                node.tag(&[("ContentType", Some(WORKBOOK_CONTENT.into()))], node.empty)
+                    .into_bytes(),
+            )],
+        )?;
+        self.parts.insert("[Content_Types].xml".into(), bytes);
+        Ok(())
     }
     pub fn get(&self, path: &str) -> Result<&[u8]> {
         self.parts
@@ -1303,13 +1440,19 @@ pub(crate) fn umya_read(bytes: &[u8], job: &JobControl) -> Result<umya_spreadshe
 }
 
 pub fn read_source(path: &Path, job: &JobControl) -> Result<WorkbookData> {
-    job.check()?;
-    extension(path, "xlsx")?;
-    let bytes = read_bounded(path, MAX_FILE, job)?;
-    let hash = digest(&bytes);
-    let package = Package::from_bytes(&bytes, job)?;
-    let data = data_from_package(&package, hash.clone(), job)?;
-    let book = umya_read(&bytes, job)?;
+    let (bytes, package) = read_source_package(path, job)?;
+    read_source_data(path, &bytes, &package, job).map_err(|e| source_error(path, e))
+}
+
+fn read_source_data(
+    path: &Path,
+    bytes: &[u8],
+    package: &Package,
+    job: &JobControl,
+) -> Result<WorkbookData> {
+    let hash = digest(bytes);
+    let data = data_from_package(package, hash.clone(), job)?;
+    let book = umya_read(bytes, job)?;
     if book
         .sheet_collection_no_check()
         .iter()

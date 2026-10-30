@@ -1272,6 +1272,26 @@ pub fn export_excel(
     overwrite: bool,
     job: &JobControl,
 ) -> Result<PathBuf> {
+    export_excel_inner(config, result, destination, allow_issues, overwrite, job).map_err(|cause| {
+        if let FdxError::Io(e) = cause {
+            error(format!(
+                "Export impossible vers '{}' : {e}. Fermez le fichier dans Excel ou LibreOffice s'il est verrouille, verifiez les droits d'ecriture et l'espace disponible, ou choisissez un autre dossier puis relancez l'export. La source reste intacte.",
+                destination.file_name().unwrap_or(destination.as_os_str()).to_string_lossy()
+            ))
+        } else {
+            cause
+        }
+    })
+}
+
+fn export_excel_inner(
+    config: &ProjectConfig,
+    result: &AnalysisResult,
+    destination: &Path,
+    allow_issues: bool,
+    overwrite: bool,
+    job: &JobControl,
+) -> Result<PathBuf> {
     job.check()?;
     extension(destination, "xlsx")?;
     protect_paths(
@@ -1320,13 +1340,12 @@ pub fn export_excel(
     }
     job.report("export", 0, Some(5), "Preparation de la copie preservee");
     let source_path = Path::new(&config.source_path);
-    extension(source_path, "xlsx")?;
-    let bytes = read_bounded(source_path, MAX_FILE, job)?;
+    let (bytes, original) = read_source_package(source_path, job)?;
     if digest(&bytes) != result.source_hash {
         return Err(error("La source a change : resultat obsolete."));
     }
-    let original = Package::from_bytes(&bytes, job)?;
-    let source = data_from_package(&original, result.source_hash.clone(), job)?;
+    let source = data_from_package(&original, result.source_hash.clone(), job)
+        .map_err(|e| source_error(source_path, e))?;
     let parts = sheet_parts(&original, job)?;
     let selected = parts
         .iter()
@@ -1345,7 +1364,7 @@ pub fn export_excel(
         job,
     )?;
 
-    let book = umya_read(&bytes, job)?;
+    let book = umya_read(&bytes, job).map_err(|e| source_error(source_path, e))?;
     let mut candidate = Vec::new();
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         umya_spreadsheet::writer::xlsx::write_writer(&book, &mut candidate)
@@ -1368,6 +1387,8 @@ pub fn export_excel(
     }
     drop(candidate);
     drop(book);
+    // A template becomes a workbook only in the output copy; source parts stay intact.
+    package.normalize_workbook_type(job)?;
     ensure_styles(&mut package, job)?;
     job.report("export", 1, Some(5), "Formats horizontaux sans groupement");
     let style_bytes = harmonize_styles(package.get("xl/styles.xml")?, job)?;
@@ -1439,6 +1460,9 @@ pub fn export_excel(
     );
     let reopened = read_bounded(temp.path(), MAX_FILE, job)?;
     let actual = Package::from_bytes(&reopened, job)?;
+    if actual.format(job)? != WorkbookFormat::Workbook {
+        return Err(error("Le contenu exporte ne correspond pas a l'extension .xlsx."));
+    }
     verify(
         &package, &actual, &original, &source, config, &changes, &reports, job,
     )?;
@@ -1456,7 +1480,7 @@ pub fn export_excel(
     }
     drop(reopened_book);
     job.report("export", 4, Some(5), "Verification finale de la source");
-    if hash_file(source_path, job)? != result.source_hash {
+    if hash_file(source_path, job).map_err(|e| source_error(source_path, e))? != result.source_hash {
         return Err(error(
             "La source a change pendant l'export ; fichier final non publie.",
         ));
@@ -1477,15 +1501,11 @@ pub fn export_excel(
             }
             job.check()?;
             temp.persist(destination)
-                .map_err(|e| io_error("Publication impossible (fichier verrouille ?)", e.error))?;
+                .map_err(|e| FdxError::Io(e.error))?;
         }
         None => {
-            temp.persist_noclobber(destination).map_err(|e| {
-                io_error(
-                    "La destination existe deja ou ne peut pas etre creee",
-                    e.error,
-                )
-            })?;
+            temp.persist_noclobber(destination)
+                .map_err(|e| FdxError::Io(e.error))?;
         }
     }
     job.report("export", 5, Some(5), "Export verifie");

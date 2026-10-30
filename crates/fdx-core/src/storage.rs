@@ -422,11 +422,12 @@ pub fn save_project(path: &Path, project: &SavedProject) -> Result<()> {
         validate_decision(key, decision)?;
     }
     let job = JobControl::default();
-    let source = read_bounded(Path::new(&config.source_path), MAX_FILE, &job)?;
+    let source_path = Path::new(&config.source_path);
+    let (source, package) = read_source_package(source_path, &job)?;
     let source_hash = digest(&source);
-    let package = Package::from_bytes(&source, &job)?;
-    data_from_package(&package, source_hash.clone(), &job)?;
-    umya_read(&source, &job)?;
+    data_from_package(&package, source_hash.clone(), &job)
+        .map_err(|e| source_error(source_path, e))?;
+    umya_read(&source, &job).map_err(|e| source_error(source_path, e))?;
     let dictionary = if config.dictionary_path.is_empty() {
         vec![]
     } else {
@@ -535,7 +536,9 @@ pub fn open_project(path: &Path, cache_directory: &Path) -> Result<SavedProject>
     let folder = tempfile::Builder::new()
         .prefix("fdx-session-")
         .tempdir_in(cache_directory)?;
-    let source_path = folder.path().join("source.xlsx");
+    let source_path = folder
+        .path()
+        .join(format!("source.{}", package.format(&job)?.suffix()));
     write_copy(&source_path, source)?;
     if project.config.original_path.is_empty() {
         project.config.original_path = project.config.source_path.clone();

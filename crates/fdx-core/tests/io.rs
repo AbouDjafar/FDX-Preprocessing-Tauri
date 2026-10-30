@@ -1359,3 +1359,326 @@ fn legacy_non_midnight_dates_are_refused_and_history_numbers_remain_exact() {
     let reopened = open_project(&migrated, &fixture.path("cache2")).unwrap();
     assert_eq!(reopened.history, loaded.history);
 }
+
+fn template_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    let source = fixture.path("source.XLTX");
+    fs::rename(&fixture.source, &source).unwrap();
+    fixture.source = source;
+    fixture.config.source_path = fixture.source.to_string_lossy().into_owned();
+    edit(&fixture.source, "[Content_Types].xml", |x| {
+        x.replace(
+            "spreadsheetml.sheet.main+xml",
+            "spreadsheetml.template.main+xml",
+        )
+    });
+    fixture
+}
+
+#[test]
+fn template_input_exports_a_real_xlsx_without_modifying_the_template() {
+    let mut fixture = template_fixture();
+    fixture.config.harmonized = false;
+    let before = fs::read(&fixture.source).unwrap();
+    let original_parts = parts(&fixture.source);
+    let data = read_source(&fixture.source, &JobControl::default()).unwrap();
+    let info = inspect(&fixture.source, 1, &JobControl::default()).unwrap();
+    assert_eq!(info.sheets.len(), 2);
+    assert_eq!(info.suggested_sheet, "Donnees");
+    let output = fixture.export("template-result.XLSX");
+    let exported = read_source(&output, &JobControl::default()).unwrap();
+    assert_eq!(fs::read(&fixture.source).unwrap(), before);
+    assert_eq!(exported.sheets.len(), data.sheets.len());
+    assert_eq!(exported.sheets[0].cell(4, 4), data.sheets[0].cell(4, 4));
+    assert_eq!(exported.sheets[0].cell(2, 5), data.sheets[0].cell(2, 5));
+    assert_eq!(exported.sheets[0].cell(2, 3), CellValue::text("00123"));
+    let output_parts = parts(&output);
+    for (name, bytes) in &original_parts {
+        assert!(output_parts.contains_key(name), "lost part: {name}");
+        if !matches!(
+            name.as_str(),
+            "[Content_Types].xml" | "xl/workbook.xml" | "xl/styles.xml"
+        ) && !name.starts_with("xl/worksheets/")
+        {
+            assert_eq!(&output_parts[name], bytes, "changed part: {name}");
+        }
+    }
+    assert_eq!(
+        xml(&output, "[Content_Types].xml"),
+        xml(&fixture.source, "[Content_Types].xml").replace(
+            "spreadsheetml.template.main+xml",
+            "spreadsheetml.sheet.main+xml",
+        )
+    );
+    no_temporary_files(fixture.dir.path());
+}
+
+#[test]
+fn template_project_roundtrip_keeps_original_bytes_and_template_suffix() {
+    let fixture = template_fixture();
+    let before = fs::read(&fixture.source).unwrap();
+    let path = fixture.path("template.fdxproj");
+    let project = SavedProject {
+        config: fixture.config.clone(),
+        ..Default::default()
+    };
+    save_project(&path, &project).unwrap();
+    let loaded = open_project(&path, &fixture.path("cache")).unwrap();
+    let source = Path::new(&loaded.config.source_path);
+    assert_eq!(source.extension().unwrap(), "xltx");
+    assert_eq!(fs::read(source).unwrap(), before);
+    let data = read_source(source, &JobControl::default()).unwrap();
+    let result = engine::analyze(
+        &loaded.config,
+        &data,
+        &loaded.decisions,
+        &JobControl::default(),
+    )
+    .unwrap();
+    let output = fixture.path("from-project.xlsx");
+    export_excel(
+        &loaded.config,
+        &result,
+        &output,
+        true,
+        false,
+        &JobControl::default(),
+    )
+    .unwrap();
+    read_source(&output, &JobControl::default()).unwrap();
+    save_project(&fixture.path("template-again.fdxproj"), &loaded).unwrap();
+    assert_eq!(fs::read(&fixture.source).unwrap(), before);
+}
+
+#[test]
+fn source_suffix_must_match_the_actual_ooxml_workbook_type() {
+    for fixture in [Fixture::new(), template_fixture()] {
+        let wrong_suffix = if fixture.source.extension().unwrap() == "xlsx" {
+            "renamed.xltx"
+        } else {
+            "renamed.xlsx"
+        };
+        let path = fixture.path(wrong_suffix);
+        fs::copy(&fixture.source, &path).unwrap();
+        let before = fs::read(&path).unwrap();
+        let message = read_source(&path, &JobControl::default())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("Extension et contenu incompatibles"),
+            "{message}"
+        );
+        assert!(message.contains("Enregistrer sous"), "{message}");
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+}
+
+#[test]
+fn ambiguous_missing_and_spoofed_workbook_content_types_are_rejected() {
+    for replacement in [
+        "",
+        r#"<Override PartName="/xl/workbook.xml" ContentType="application/unknown"/>"#,
+        r#"<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml"/>"#,
+        r#"<Override xmlns="urn:spoof" PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>"#,
+    ] {
+        let fixture = Fixture::new();
+        edit(&fixture.source, "[Content_Types].xml", |x| {
+            x.replace(
+                r#"<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>"#,
+                replacement,
+            )
+        });
+        assert!(read_source(&fixture.source, &JobControl::default()).is_err());
+    }
+}
+
+#[test]
+fn unsupported_excel_formats_get_explicit_non_lossy_conversion_guidance() {
+    for suffix in ["xls", "xlsb", "xlt", "xlsm", "xltm", "xlam", "ods", "csv"] {
+        let fixture = Fixture::new();
+        let path = fixture.path(&format!("source.{suffix}"));
+        fs::copy(&fixture.source, &path).unwrap();
+        let before = fs::read(&path).unwrap();
+        let message = read_source(&path, &JobControl::default())
+            .unwrap_err()
+            .to_string();
+        for expected in [
+            "non pris en charge",
+            "Excel",
+            "LibreOffice",
+            ".xlsx",
+            "copie",
+            "recharge",
+        ] {
+            assert!(message.contains(expected), "{suffix}: {message}");
+        }
+        if matches!(suffix, "xlsm" | "xltm" | "xlam") {
+            assert!(message.contains("VBA"), "{message}");
+            assert!(message.contains("explicitement acceptable"), "{message}");
+        }
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+}
+
+#[test]
+fn corruption_and_encryption_errors_explain_repair_save_and_reload() {
+    let complete = zip_bytes(&synthetic());
+    for bytes in [
+        Vec::new(),
+        b"not an Excel archive".to_vec(),
+        complete[..complete.len() / 2].to_vec(),
+        vec![0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1],
+    ] {
+        let fixture = Fixture::new();
+        fs::write(&fixture.source, &bytes).unwrap();
+        let message = inspect(&fixture.source, 1, &JobControl::default())
+            .unwrap_err()
+            .to_string();
+        for expected in [
+            "source.xlsx",
+            "Excel",
+            "LibreOffice",
+            "reparez",
+            "enregistrez",
+            "rechargez",
+            "source reste intacte",
+        ] {
+            assert!(message.contains(expected), "{message}");
+        }
+        assert_eq!(fs::read(&fixture.source).unwrap(), bytes);
+    }
+    let fixture = Fixture::new();
+    edit(&fixture.source, "xl/workbook.xml", |_| "<workbook>".into());
+    let message = read_source(&fixture.source, &JobControl::default())
+        .unwrap_err()
+        .to_string();
+    assert!(message.contains("tronque"), "{message}");
+    assert!(message.contains("reparez"), "{message}");
+}
+
+#[test]
+fn missing_source_errors_name_the_file_and_how_to_reselect_it() {
+    let fixture = Fixture::new();
+    let message = read_source(&fixture.path("missing.xlsx"), &JobControl::default())
+        .unwrap_err()
+        .to_string();
+    assert!(message.contains("missing.xlsx"), "{message}");
+    assert!(message.contains("introuvable"), "{message}");
+    assert!(message.contains("selectionnez"), "{message}");
+}
+
+#[test]
+fn templates_retain_object_xml_archive_and_cancellation_safeguards() {
+    for part in [
+        "xl/vbaProject.bin",
+        "xl/embeddings/object.bin",
+        "../escape.xml",
+    ] {
+        let fixture = template_fixture();
+        let mut entries = parts(&fixture.source);
+        entries.insert(part.into(), b"opaque payload".to_vec());
+        fs::write(&fixture.source, zip_bytes(&entries)).unwrap();
+        assert!(read_source(&fixture.source, &JobControl::default()).is_err());
+    }
+    let fixture = template_fixture();
+    edit(&fixture.source, "xl/workbook.xml", |x| {
+        format!("<!DOCTYPE forbidden>{x}")
+    });
+    assert!(read_source(&fixture.source, &JobControl::default())
+        .unwrap_err()
+        .to_string()
+        .contains("DTD"));
+    let job = JobControl {
+        cancelled: Arc::new(AtomicBool::new(true)),
+        progress: None,
+    };
+    assert!(matches!(
+        read_source(&fixture.source, &job),
+        Err(FdxError::Cancelled)
+    ));
+}
+
+#[cfg(windows)]
+#[test]
+fn locked_source_errors_suggest_closing_excel_without_changing_the_source() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let fixture = Fixture::new();
+    let before = fs::read(&fixture.source).unwrap();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(&fixture.source)
+        .unwrap();
+    let message = read_source(&fixture.source, &JobControl::default())
+        .unwrap_err()
+        .to_string();
+    drop(lock);
+    assert!(message.contains("verrouille ou acces refuse"), "{message}");
+    assert!(message.contains("Excel ou LibreOffice"), "{message}");
+    assert!(message.contains("rechargez"), "{message}");
+    assert_eq!(fs::read(&fixture.source).unwrap(), before);
+}
+
+#[cfg(windows)]
+#[test]
+fn locked_destination_errors_explain_closing_excel_and_retrying_export() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let fixture = Fixture::new();
+    let result = fixture.analyze(Decisions::new());
+    let before = fs::read(&fixture.source).unwrap();
+    let output = fixture.path("locked-message.xlsx");
+    fs::write(&output, b"keep destination").unwrap();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .share_mode(0)
+        .open(&output)
+        .unwrap();
+    let message = export_excel(
+        &fixture.config,
+        &result,
+        &output,
+        true,
+        true,
+        &JobControl::default(),
+    )
+    .unwrap_err()
+    .to_string();
+    drop(lock);
+    for expected in [
+        "locked-message.xlsx",
+        "Excel ou LibreOffice",
+        "relancez l'export",
+    ] {
+        assert!(message.contains(expected), "{message}");
+    }
+    assert_eq!(fs::read(&fixture.source).unwrap(), before);
+    assert_eq!(fs::read(&output).unwrap(), b"keep destination");
+    no_temporary_files(fixture.dir.path());
+}
+
+#[test]
+fn template_export_refuses_non_xlsx_destinations_without_creating_files() {
+    let fixture = template_fixture();
+    let result = fixture.analyze(Decisions::new());
+    let before = fs::read(&fixture.source).unwrap();
+    for suffix in ["xltx", "xlsm", "xltm", "xls", "xlsb"] {
+        let output = fixture.path(&format!("refused.{suffix}"));
+        let message = export_excel(
+            &fixture.config,
+            &result,
+            &output,
+            true,
+            false,
+            &JobControl::default(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(message.contains("extension .xlsx"), "{message}");
+        assert!(!output.exists());
+    }
+    assert_eq!(fs::read(&fixture.source).unwrap(), before);
+    no_temporary_files(fixture.dir.path());
+}
