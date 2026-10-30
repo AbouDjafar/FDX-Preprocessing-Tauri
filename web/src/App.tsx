@@ -157,7 +157,8 @@ export default function App() {
     </Modal>}
     {detailsQuestion && <Modal title="Enregistrer le projet" onClose={() => answerDetails(null)}><form onSubmit={e => { e.preventDefault(); if (name.trim() && family.trim()) answerDetails({ name: name.trim(), family: family.trim() }); }}>
       <Field label="Nom du projet"><input autoFocus required maxLength={200} value={name} onChange={e => setName(e.target.value)} data-testid="project-name" /></Field>
-      <Field label="Famille de données"><input list="project-families" required maxLength={100} value={family} onChange={e => setFamily(e.target.value)} /><datalist id="project-families"><option>Marchés signés</option><option>Passation</option><option>Exécution</option></datalist></Field>
+      <Field label="Famille de données"><input list="project-families" required maxLength={100} value={family} onChange={e => setFamily(e.target.value)} /></Field>
+      <datalist id="project-families"><option>Marchés signés</option><option>Passation</option><option>Exécution</option></datalist>
       <footer className="modal-footer"><Button onClick={() => answerDetails(null)}>Annuler</Button><Button primary icon={Save} type="submit" disabled={!name.trim() || !family.trim() || w.busy}>Choisir l’emplacement</Button></footer>
     </form></Modal>}
   </div>;
