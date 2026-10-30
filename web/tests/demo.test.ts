@@ -50,6 +50,16 @@ describe('browser synthetic adapter', () => {
     const opened = await run('project_open', { path: '/DEMO/projet-demo.fdxproj' });
     expect(opened.summary).toBeNull(); expect(opened.dirty).toBe(true);
   });
+  it('saves late project details without invalidating the current analysis', async () => {
+    await prepare();
+    const summary = session!.summary;
+    session = await run('metadata', { name: '  Suivi préparé  ', family: 'Passation' });
+    expect(session.name).toBe('Suivi préparé'); expect(session.family).toBe('Passation');
+    expect(session.dirty).toBe(false); expect(session.summary).toEqual(summary);
+    await run('project_save', { path: '/DEMO/renomme.fdxproj' });
+    const restored = await run('project_open', { path: '/DEMO/renomme.fdxproj' });
+    expect(restored.name).toBe('Suivi préparé'); expect(restored.family).toBe('Passation');
+  });
   it('preserves current analysis for report-only settings and resets profiles', async () => {
     await prepare();
     session = await run('configure', { config: { ...session!.config, harmonized: false, reports: [] } });

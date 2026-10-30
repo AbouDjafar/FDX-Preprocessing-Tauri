@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Progress } from '../src/model';
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), isTauri: vi.fn(() => false), open: vi.fn(), save: vi.fn(), listen: vi.fn(), channel: null as null | { onmessage: (p: Progress) => void } }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn(), isTauri: vi.fn(() => false), open: vi.fn(), save: vi.fn(), listen: vi.fn(), close: vi.fn(), closeListen: vi.fn(), channel: null as null | { onmessage: (p: Progress) => void } }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke, isTauri: mocks.isTauri, Channel: class { onmessage = (_p: Progress) => {}; constructor() { mocks.channel = this; } } }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.open, save: mocks.save }));
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: mocks.listen }) }));
-import { createAdapter, DesktopAdapter, selectFile, subscribeDrop } from '../src/services/bridge';
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ destroy: mocks.close, onCloseRequested: mocks.closeListen }) }));
+import { createAdapter, DesktopAdapter, selectFile, subscribeClose, subscribeDrop } from '../src/services/bridge';
 
 describe('native contract', () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.isTauri.mockReturnValue(false); });
@@ -34,7 +35,7 @@ describe('native contract', () => {
   it('uses native dialogs without browser fakepath or filesystem permissions', async () => {
     mocks.open.mockResolvedValue('C:\\Synthetic\\source.xlsx');
     expect(await selectFile('desktop', 'source')).toBe('C:\\Synthetic\\source.xlsx');
-    expect(mocks.open).toHaveBeenCalledWith(expect.objectContaining({ multiple: false, directory: false, filters: [{ name: 'Classeur Excel', extensions: ['xlsx'] }] }));
+    expect(mocks.open).toHaveBeenCalledWith(expect.objectContaining({ multiple: false, directory: false, filters: [{ name: 'Fichiers Excel', extensions: ['xlsx', 'xltx', 'xls', 'xlsb', 'xlsm', 'xltm', 'xlt', 'xla', 'xlam'] }] }));
     mocks.save.mockResolvedValue(null); expect(await selectFile('desktop', 'export', true, 'copie.xlsx')).toBeNull();
     await expect(selectFile('demo', 'export', true)).rejects.toMatchObject({ code: 'DEMO_ONLY' });
   });
@@ -42,5 +43,18 @@ describe('native contract', () => {
     const cleanup = vi.fn(); const onDrop = vi.fn(); const onHover = vi.fn();
     mocks.listen.mockImplementation(async (fn: (event: { payload: { type: string; paths?: string[] } }) => void) => { fn({ payload: { type: 'over' } }); fn({ payload: { type: 'drop', paths: ['C:\\Synthetic\\source.xlsx'] } }); return cleanup; });
     const stop = await subscribeDrop(onDrop, onHover); expect(onHover).toHaveBeenCalledWith(true); expect(onDrop).toHaveBeenCalledWith(['C:\\Synthetic\\source.xlsx']); stop(); expect(cleanup).toHaveBeenCalledOnce();
+  });
+  it('does not close the native window until save/discard is approved', async () => {
+    let handler!: (event: { preventDefault: () => void }) => Promise<void>;
+    const cleanup = vi.fn(); const canClose = vi.fn().mockResolvedValue(false); const reportError = vi.fn();
+    mocks.closeListen.mockImplementation(async fn => { handler = fn; return cleanup; });
+    const stop = await subscribeClose(canClose, reportError);
+    const first = { preventDefault: vi.fn() }; await handler(first);
+    expect(first.preventDefault).toHaveBeenCalledOnce(); expect(mocks.close).not.toHaveBeenCalled();
+    canClose.mockResolvedValue(true);
+    mocks.close.mockResolvedValue(undefined);
+    await handler({ preventDefault: vi.fn() });
+    expect(mocks.close).toHaveBeenCalledOnce(); expect(reportError).not.toHaveBeenCalled();
+    stop(); expect(cleanup).toHaveBeenCalledOnce();
   });
 });

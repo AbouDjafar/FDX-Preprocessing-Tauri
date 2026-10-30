@@ -120,6 +120,11 @@ export class DemoAdapter implements Adapter {
     const s = copy(previous!);
     const p = req.payload;
     switch (req.op) {
+      case 'metadata': {
+        const { name, family } = p as Operations['metadata']['payload'];
+        if (!name.trim() || name.trim().length > 200 || !family.trim() || family.trim().length > 100) fail('METADATA_INVALID', 'Renseignez un nom et une famille de données valides.');
+        s.session.name = name.trim(); s.session.family = family.trim(); break;
+      }
       case 'import': {
         const { path, sheet, header_row, dictionary_path } = p as Operations['import']['payload']; this.assertFixture(path);
         if (dictionary_path) this.assertFixture(dictionary_path);
@@ -187,10 +192,10 @@ export class DemoAdapter implements Adapter {
       case 'open_path': return fail('DEMO_ONLY', 'Les chemins DEMO sont synthétiques et ne correspondent à aucun fichier local.');
       default: return fail('UNKNOWN_OPERATION', 'Opération inconnue.');
     }
-    const outputOnly = req.op === 'configure' && analysisConfig(s.session.config) === analysisConfig(previous!.session.config);
+    const outputOnly = req.op === 'metadata' || (req.op === 'configure' && analysisConfig(s.session.config) === analysisConfig(previous!.session.config));
     if (req.op === 'analyze') s.session.dirty = false;
     else if (!outputOnly) s.session.dirty = true;
-    s.session.revision++; s.session.export_path = null;
+    s.session.revision++; if (req.op !== 'metadata') s.session.export_path = null;
     s.session.can_undo = !!s.undo.length; s.session.can_redo = !!s.redo.length;
     if (req.op !== 'decide') s.history.push({ at: new Date().toISOString(), op: req.op, revision: s.session.revision });
     this.states.set(s.session.id, s);

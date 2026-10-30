@@ -104,6 +104,8 @@ test('editable dictionaries, distinct column positions, rules, profiles and proj
   await page.getByRole('dialog').getByRole('button', { name: 'Charger le profil', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Confirmer et analyser toutes les lignes' })).toBeDisabled();
   await page.getByTestId('save-project').click();
+  await expect(page.getByRole('dialog', { name: 'Enregistrer le projet', exact: true })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Choisir l’emplacement', exact: true }).click();
   await expect(page.getByText('Projet DEMO enregistré en mémoire. Aucun fichier créé.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Vue d’ensemble', exact: true }).click();
   await page.locator('.project-row').first().click();

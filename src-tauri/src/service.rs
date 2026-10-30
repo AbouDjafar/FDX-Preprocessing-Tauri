@@ -282,6 +282,17 @@ impl AppState {
             ));
         }
         let response = match request.op.as_str() {
+            "metadata" => {
+                let name = text(p, "name")?.trim();
+                let family = text(p, "family")?.trim();
+                if name.chars().count() > 200 || family.chars().count() > 100 {
+                    return Err(error("Le nom est limite a 200 caracteres et la famille a 100 caracteres."));
+                }
+                s.name = name.to_owned();
+                s.family = family.to_owned();
+                s.record("metadata", json!({"name":name,"family":family}));
+                Value::Null
+            }
             "import" => {
                 let path = text(p, "path")?;
                 let mut config = ProjectConfig {
@@ -690,6 +701,24 @@ mod tests {
     fn analyzed_demo(app: &AppState) -> Value {
         let session = configured_demo(app);
         command(app, "analyze", &session, json!({}))
+    }
+
+    #[test]
+    fn late_project_details_preserve_analysis_and_round_trip_on_save() {
+        let root = tempfile::tempdir().unwrap();
+        let app = AppState::new(root.path().to_owned()).unwrap();
+        let analyzed = analyzed_demo(&app);
+        let renamed = command(&app, "metadata", &analyzed, json!({"name":"  Suivi prepare  ","family":"Passation"}));
+        assert_eq!(renamed["name"], "Suivi prepare");
+        assert_eq!(renamed["family"], "Passation");
+        assert_eq!(renamed["summary"], analyzed["summary"]);
+        assert_eq!(renamed["dirty"], false);
+        let path = root.path().join("suivi.fdxproj");
+        command(&app, "project_save", &renamed, json!({"path":path}));
+        let opened = app.execute(request("project_open", None, json!({"path":path})), &JobControl::default()).unwrap();
+        assert_eq!(opened["name"], "Suivi prepare");
+        assert_eq!(opened["family"], "Passation");
+        assert!(app.execute(request("metadata", Some(&renamed), json!({"name":" ","family":"Passation"})), &JobControl::default()).is_err());
     }
 
     fn snapshot(app: &AppState, view: &Value) -> Session {

@@ -28,6 +28,7 @@ Core tests independent of Tauri. No source modification, implicit destructive co
 `invoke('fdx', {request: {op, session_id?, task_id, revision?, payload}, onEvent: Channel<Progress>})` returns JSON. `cancel_task({taskId})` is separate. Desktop uses @tauri-apps/api/core; browser uses explicit fixture adapter (NO real-file processing/export). No broad filesystem/shell permission. Native dialog plugin selects files; returned paths sent to bridge. Op payloads and responses:
 
 - create: {name,family} -> Session
+- metadata: {name,family} -> Session (late naming at save; preserve analysis/decisions, advance revision)
 - demo: {} -> Session (native generates synthetic XLSX and dictionary in app cache)
 - recent: {} -> array of {id,name,family,updated,path,status}; saved project catalog only
 - inspect: {path,header_row} -> WorkbookInfo (does not mutate session)

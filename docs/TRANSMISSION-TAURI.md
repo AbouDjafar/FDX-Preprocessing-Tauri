@@ -2,7 +2,9 @@
 
 ## Etat et objectif
 
-Version 2.0.0 livree : React/TypeScript, Tauri 2, moteur entierement Rust. Le code Python conserve sert d'oracle de test, jamais de runtime distribue. Ne pas confondre presence de code, build reussi et release validee. Lire les resultats Actions du commit concerne avant toute affirmation de recette.
+FDX Atelier 2.1.0 en validation : React/TypeScript, Tauri 2, moteur entierement Rust. Distribution par installateur uniquement. Le code Python conserve sert d'oracle de test, jamais de runtime distribue. Ne pas confondre presence de code, build reussi et release validee. Lire les resultats Actions du commit concerne avant toute affirmation de recette.
+
+Correctifs 2.1 : creation directe vers import ; nom/famille a la sauvegarde via commande metadata sans invalider l'analyse ; choix enregistrer/ignorer/annuler avant remplacement ou fermeture native ; apercu sur demande ; titre/etapes fixes et retour en haut ; animations reduites si preference systeme ; infobulles masquees derriere les modales. Version visible issue de web/package.json, coherence des manifestes/lockfiles verifiee en CI. Identifiants techniques stables pour les projets et mises a jour.
 
 Release : https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0 ; commit exact `c80275963ef9ca5976800a27d7188b36a373d38c`. Runs reussis : checks `40359754161`, Windows `40359786062`, publication sans recompilation `40362120944`. Verification : 81 tests Rust Windows, 19 tests frontend, 23 scenarios Playwright, 7 comparaisons independantes avec l'oracle Python ; parcours natif avec vrai dialogue Windows, telephone multiple, export rouvert, source intacte et projet repris. Recette sur donnees fictives, pas de certification de fichiers metier prives.
 
@@ -27,6 +29,8 @@ Resultat courant = source + configuration + decisions correspondantes. Une nouve
 Lecture raw XML bornee et validation umya-spreadsheet. Ecriture conservatrice du paquet OOXML ; conserver les parties source non modifiees. Refuser objets non conservables, entites/DTD, archives hors limites et precision non conservable. Valeurs, formules, feuilles, fusions, dimensions, filtres et volets doivent etre verifies.
 
 Rotation zero et formats sans groupement sur cellules, lignes, colonnes et styles conditionnels. Preserver pourcentages, valeurs, decimales et dates. Rapports selectionnables control/original/verify, suffixes si noms deja presents. Rapports reconstruits depuis le resultat final. Temporaire dans le dossier cible, reouverture/verification, empreinte source finale, publication atomique. Jamais ecraser source ou dictionnaire.
+
+Formats 2.1 : sources .xlsx/.xltx, sortie .xlsx (type OOXML normalise pour les modeles). Projets preservent octets et suffixe source. .xls/.xlsb et formats a macros restent refuses : pas de conversion silencieuse ni de suppression VBA. Erreurs corrompu/chiffre/verrouille/inaccessible expliquent la cause et proposent ouverture/reparation/enregistrement d'une copie dans Excel/LibreOffice, verification des objets conserves puis rechargement.
 
 Profils JSON sans chemins personnels ; mappings reconfirmes. Projets SQLite contiennent copie source, dictionnaire, decisions et historique, non chiffres. Import v1 vers v2 sans remplacement silencieux de l'ancien fichier et sans reutilisation de l'ancienne analyse. Les projets/caches/catalogues sont locaux, jamais dans Git ou les artefacts publics.
 

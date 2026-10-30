@@ -19,6 +19,7 @@ from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.remote.client_config import ClientConfig
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException
 
 
 def call(driver, op, payload=None, session=None, fail=False):
@@ -153,7 +154,24 @@ def check(driver, folder, application_id):
     restored = call(driver, 'analyze', session=restored)
     assert restored['summary']['findings'] == session['summary']['findings']
     print('Native project reopened and verified', flush=True)
-    return {'ok': True, 'rows': 3, 'native_ui': True, 'native_ui_export': True, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True}
+    close_command = f'$p = Get-Process -Id {application_id}; if (-not $p.CloseMainWindow()) {{ exit 1 }}'
+    def request_close():
+        subprocess.run(['powershell', '-NoProfile', '-Command', close_command], capture_output=True, text=True, timeout=15, check=True)
+    request_close()
+    warning = '//dialog//h2[normalize-space()="Enregistrer avant de continuer ?"]'
+    wait.until(EC.visibility_of_element_located((By.XPATH, warning)))
+    driver.find_element(By.XPATH, '//dialog//button[normalize-space()="Annuler"]').click()
+    wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'dialog[open]')))
+    request_close()
+    wait.until(EC.visibility_of_element_located((By.XPATH, warning)))
+    try:
+        driver.find_element(By.XPATH, '//dialog//button[normalize-space()="Continuer sans enregistrer"]').click()
+    except WebDriverException:
+        # Closing the only window can end the driver command before its response;
+        # the parent test requires the real application process to exit below.
+        pass
+    print('Native close confirmation exercised', flush=True)
+    return {'ok': True, 'rows': 3, 'native_ui': True, 'native_ui_export': True, 'native_bridge': True, 'source_unchanged': True, 'export_reopened': True, 'project_reopened': True, 'close_guard': True}
 
 
 if __name__ == '__main__':
@@ -231,6 +249,8 @@ if __name__ == '__main__':
         print('Native application session created', flush=True)
         driver.set_script_timeout(45)
         report = check(driver, destination.resolve(), application.pid)
+        application.wait(timeout=15)
+        assert application.returncode == 0, application.returncode
         (destination / 'verification.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
         print(json.dumps(report))
     except BaseException:

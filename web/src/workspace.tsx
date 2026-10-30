@@ -33,7 +33,11 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
   const [analyzedConfig, setAnalyzedConfig] = useState<string | null>(null);
   const [question, setQuestion] = useState<{ title: string; message: string; accept: string; resolve: (yes: boolean) => void } | null>(null);
   const questionRef = useRef(question); questionRef.current = question;
-  const reportError = useCallback((value: unknown) => setError(normalizeError(value)), []);
+  const reportError = useCallback((value: unknown) => {
+    const normalized = normalizeError(value);
+    if (normalized.code.toLowerCase() === 'cancelled') { setError(null); notify('Opération annulée. La source reste intacte.'); }
+    else setError(normalized);
+  }, []);
   const act = useCallback((fn: () => Promise<unknown>) => { void fn().catch(reportError); }, [reportError]);
   const run: Run = useCallback(async <K extends Op,>(op: K, payload: Operations[K]['payload'], quiet = false): Promise<Operations[K]['result']> => {
     const mutating = !readOps.has(op);
@@ -98,9 +102,9 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
   const edited = !!draft && !!session && JSON.stringify(draft) !== JSON.stringify(session.config);
   const decisionsReady = !!session?.summary && !!draft && analysisConfig(draft) === analyzedConfig;
   useEffect(() => {
-    const guard = (e: BeforeUnloadEvent) => { if (edited || unsaved || task) { e.preventDefault(); e.returnValue = ''; } };
+    const guard = (e: BeforeUnloadEvent) => { if (adapter.mode !== 'desktop' && (edited || unsaved || task)) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
-  }, [edited, unsaved, task]);
+  }, [adapter.mode, edited, unsaved, task]);
   return <Context.Provider value={{ mode: adapter.mode, session, draft, edited, unsaved, decisionsReady, edit, task, busy: !!task, error, reportError, clearError: () => setError(null), run, act, cancel, saveDraft, analyze, recent, refreshRecent, confirm, toast, notify }}>
     {children}
     {question && <Modal title={question.title} onClose={() => answer(false)}><p className="dialog-message">{question.message}</p><footer className="modal-footer"><Button icon={X} onClick={() => answer(false)}>Annuler</Button><Button icon={Check} primary onClick={() => answer(true)}>{question.accept}</Button></footer></Modal>}

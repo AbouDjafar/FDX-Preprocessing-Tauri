@@ -1,5 +1,5 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
-import type { Op, Operations, Progress, Request } from '../model';
+import { workbookReadError, type Op, type Operations, type Progress, type Request } from '../model';
 import { DemoAdapter, DEMO_DICTIONARY, DEMO_SOURCE } from './demo';
 
 export interface Adapter {
@@ -13,6 +13,7 @@ export class DesktopAdapter implements Adapter {
     const onEvent = new Channel<Progress>();
     onEvent.onmessage = event => { if (event.task_id === request.task_id) onProgress(event); };
     try { return await invoke<Operations[K]['result']>('fdx', { request, onEvent }); }
+    catch (error) { throw request.op === 'inspect' || request.op === 'import' ? workbookReadError(error) : error; }
     finally { onEvent.onmessage = () => {}; }
   }
   cancel(taskId: string): Promise<void> { return invoke('cancel_task', { taskId }); }
@@ -21,7 +22,7 @@ export class DesktopAdapter implements Adapter {
 export function createAdapter(): Adapter { return isTauri() ? new DesktopAdapter() : new DemoAdapter(); }
 export type FileKind = 'source' | 'dictionary' | 'profile' | 'project' | 'export';
 const filters: Record<FileKind, { name: string; extensions: string[] }[]> = {
-  source: [{ name: 'Classeur Excel', extensions: ['xlsx'] }], dictionary: [{ name: 'Dictionnaire métier', extensions: ['md', 'txt'] }],
+  source: [{ name: 'Fichiers Excel', extensions: ['xlsx', 'xltx', 'xls', 'xlsb', 'xlsm', 'xltm', 'xlt', 'xla', 'xlam'] }], dictionary: [{ name: 'Dictionnaire métier', extensions: ['md', 'txt'] }],
   profile: [{ name: 'Profil FDX', extensions: ['json'] }], project: [{ name: 'Projet FDX', extensions: ['fdxproj'] }], export: [{ name: 'Classeur Excel', extensions: ['xlsx'] }],
 };
 export async function selectFile(mode: Adapter['mode'], kind: FileKind, save = false, name?: string): Promise<string | null> {
@@ -41,5 +42,19 @@ export async function subscribeDrop(onDrop: (paths: string[]) => void, onHover: 
   return getCurrentWebview().onDragDropEvent(({ payload }) => {
     onHover(payload.type === 'over' || payload.type === 'enter');
     if (payload.type === 'drop') onDrop(payload.paths);
+  });
+}
+export async function subscribeClose(canClose: () => Promise<boolean>, reportError: (error: unknown) => void): Promise<() => void> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const window = getCurrentWindow();
+  let pending = false;
+  return window.onCloseRequested(async event => {
+    event.preventDefault();
+    if (pending) return;
+    pending = true;
+    try {
+      if (await canClose()) await window.destroy();
+    } catch (error) { reportError(error); }
+    finally { pending = false; }
   });
 }

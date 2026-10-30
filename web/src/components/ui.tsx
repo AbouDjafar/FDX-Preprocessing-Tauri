@@ -1,11 +1,17 @@
-import { cloneElement, useId, useLayoutEffect, useRef, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Info, X, type LucideIcon } from 'lucide-react';
 
 export function Button({ icon: Icon, children, primary, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon; primary?: boolean }) {
   return <button type="button" {...props} className={`btn ${primary ? 'btn-primary' : ''} ${className}`}>{Icon && <Icon size={16} aria-hidden="true" />}{children}</button>;
 }
-export function IconButton({ icon: Icon, label, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
-  return <span className="tooltip-wrap"><button type="button" {...props} className={`btn icon-btn ${props.className || ''}`} aria-label={label} title={label}><Icon size={17} aria-hidden="true" /></button><span className="tooltip" role="tooltip">{label}</span></span>;
+export function IconButton({ icon: Icon, label, tooltip = true, className = '', onClick, onPointerEnter, onFocus, onKeyDown, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string; tooltip?: boolean }) {
+  const [dismissed, setDismissed] = useState(false);
+  return <span className="tooltip-wrap" data-tooltip-dismissed={dismissed || undefined}><button type="button" {...props} className={`btn icon-btn ${className}`} aria-label={label} title={undefined}
+    onPointerEnter={event => { if (event.pointerType !== 'touch') setDismissed(false); onPointerEnter?.(event); }}
+    onFocus={event => { if (event.currentTarget.matches(':focus-visible') && event.relatedTarget instanceof Element && !event.relatedTarget.closest('dialog')) setDismissed(false); onFocus?.(event); }}
+    onKeyDown={event => { if (event.key === 'Escape') setDismissed(true); onKeyDown?.(event); }}
+    onClick={event => { setDismissed(true); onClick?.(event); }}
+  ><Icon size={17} aria-hidden="true" /></button>{tooltip && <span className="tooltip" role="tooltip">{label}</span>}</span>;
 }
 export function Field({ label, children, hint, className = '' }: { label: string; children: ReactElement<{ id?: string; 'aria-describedby'?: string }>; hint?: string; className?: string }) {
   const id = useId();
@@ -45,10 +51,10 @@ export function Modal({ title, children, onClose, wide = false }: { title: strin
     updateZoom();
     dialog.showModal();
     window.addEventListener('resize', updateZoom);
-    return () => { window.removeEventListener('resize', updateZoom); dialog.close(); if (previous?.isConnected) previous.focus(); };
+    return () => { window.removeEventListener('resize', updateZoom); dialog.close(); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, []);
   return <dialog ref={ref} className={`modal ${wide ? 'modal-wide' : ''}`} aria-labelledby={titleId} onCancel={e => { e.preventDefault(); close.current(); }}>
-    <header className="modal-head"><h2 id={titleId}>{title}</h2><IconButton icon={X} label="Fermer la fenêtre" onClick={onClose} /></header>{children}
+    <header className="modal-head"><h2 id={titleId}>{title}</h2><IconButton icon={X} label="Fermer la fenêtre" tooltip={false} onClick={onClose} /></header>{children}
   </dialog>;
 }
 export function Pager({ offset, limit, total, onPage, onLimit, disabled }: { offset: number; limit: number; total: number; onPage: (offset: number) => void; onLimit?: (limit: number) => void; disabled?: boolean }) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analysisConfig, cell, columnName, configIssues, defaultConfig, defaultRule, emptyCell, filename, newField, normalizeError } from '../src/model';
+import { analysisConfig, cell, columnName, configIssues, defaultConfig, defaultRule, emptyCell, filename, newField, normalizeError, workbookReadError } from '../src/model';
 import { decisionFor, firstValidPhone, validManualValue } from '../src/decisions';
 import type { Finding } from '../src/model';
 
@@ -35,6 +35,12 @@ describe('Rust wire model', () => {
   it('keeps original errors in details when not a French structured error', () => {
     expect(normalizeError({ code: 'LOCKED', message: 'Fichier verrouillé.', details: { path: '/DEMO/test.xlsx' } }).code).toBe('LOCKED');
     expect(normalizeError(new Error('technical detail')).details).toBe('technical detail');
+  });
+  it('offers recovery steps without discarding the reason a workbook cannot be read', () => {
+    const error = workbookReadError({ code: 'LOCKED', message: 'Fichier verrouillé.', details: 'Accès refusé' });
+    expect(error).toMatchObject({ code: 'WORKBOOK_READ', message: 'Fichier verrouillé.', details: { code: 'LOCKED', detail: 'Accès refusé' } });
+    expect(error.recovery?.join(' ')).toContain('Microsoft Excel ou LibreOffice Calc');
+    expect(error.recovery?.join(' ')).toContain('rechargez cette copie');
   });
 });
 describe('explicit decisions', () => {

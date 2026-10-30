@@ -42,12 +42,13 @@ export interface Session {
 }
 export interface RecentProject { id: string; name: string; family: string; updated: string; path: string; status: string }
 export interface Progress { task_id: string; phase: string; current: number; total: number | null; message: string }
-export interface FdxError { code: string; message: string; details?: unknown }
+export interface FdxError { code: string; message: string; details?: unknown; recovery?: string[] }
 export type ResultView = 'findings' | 'changes' | 'history';
 export interface ResultQuery { view: ResultView; offset: number; limit: number; query?: string; kind?: string; sort?: 'row' | 'kind'; descending?: boolean }
 export interface ResultPage { items: (Finding | CellChange | HistoryEntry)[]; total: number }
 export interface Operations {
   create: { payload: { name: string; family: string }; result: Session };
+  metadata: { payload: { name: string; family: string }; result: Session };
   demo: { payload: Record<string, never>; result: Session };
   recent: { payload: Record<string, never>; result: RecentProject[] };
   inspect: { payload: { path: string; header_row: number }; result: WorkbookInfo };
@@ -68,7 +69,7 @@ export interface Operations {
 }
 export type Op = keyof Operations;
 export type Request<K extends Op = Op> = { op: K; task_id: string; session_id?: string; revision?: number; payload: Operations[K]['payload'] };
-export const sessionOps = new Set<Op>(['create', 'demo', 'import', 'dictionary', 'configure', 'analyze', 'decide', 'undo', 'redo', 'profile_load', 'project_open']);
+export const sessionOps = new Set<Op>(['create', 'metadata', 'demo', 'import', 'dictionary', 'configure', 'analyze', 'decide', 'undo', 'redo', 'profile_load', 'project_open']);
 export const readOps = new Set<Op>(['recent', 'inspect', 'results', 'open_path']);
 export const cell = (value = '', kind = 'text'): CellValue => ({ kind, value });
 export const emptyCell = (): CellValue => cell('', 'empty');
@@ -89,6 +90,20 @@ export function normalizeError(error: unknown): FdxError {
   if (typeof error === 'string') { try { return normalizeError(JSON.parse(error)); } catch { return { code: 'FDX_ERROR', message: 'L’opération n’a pas abouti.', details: error }; } }
   if (error && typeof error === 'object' && 'code' in error && 'message' in error) return error as FdxError;
   return { code: 'UI_ERROR', message: 'L’opération n’a pas abouti. Les données sources restent inchangées.', details: error instanceof Error ? error.message : error };
+}
+export function workbookReadError(error: unknown): FdxError {
+  const original = normalizeError(error);
+  if (original.code.toLowerCase() === 'cancelled') return original;
+  return {
+    code: 'WORKBOOK_READ', message: original.message,
+    details: { code: original.code, ...(original.details !== undefined ? { detail: original.details } : {}) },
+    recovery: [
+      'Ouvrez le classeur dans Microsoft Excel ou LibreOffice Calc pour vérifier son contenu.',
+      'Si nécessaire, réparez le fichier ou retirez sa protection. Vérifiez aussi vos droits d’accès et fermez le fichier s’il est verrouillé.',
+      'Avant toute conversion, vérifiez qu’aucune donnée, macro ou objet nécessaire n’est perdu et conservez l’original.',
+      'Enregistrez une nouvelle copie au format .xlsx, fermez-la dans le tableur, puis rechargez cette copie dans FDX Atelier.',
+    ],
+  };
 }
 export function configIssues(config: ProjectConfig): string[] {
   const errors: string[] = [];
