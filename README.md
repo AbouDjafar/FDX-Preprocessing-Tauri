@@ -6,7 +6,7 @@ FDX Atelier est une application Windows en français destinée aux équipes qui 
 
 [Versions vérifiées](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases) · [Aperçu de l'interface](https://aboudjafar.github.io/FDX-Preprocessing-Tauri/) · [Guide utilisateur](docs/GUIDE-TAURI.md) · [Transmission](docs/TRANSMISSION-TAURI.md)
 
-**Version 2.1.0 en préparation pour Windows x64.** Sa publication exige les contrôles Rust/React et la validation Windows complète sur son commit exact. La dernière release publiée reste [2.0.0](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0), avec ses actifs inchangés : les [contrôles Rust et React](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359754161) et la [validation Windows complète](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359786062) avaient réussi sur le même commit. Ces contrôles utilisent des données fictives ; la validation métier des fichiers réels reste nécessaire. L'aperçu Pages utilise également des données fictives et ne traite aucun fichier personnel.
+**[Version 2.1.0 disponible pour Windows x64](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.1.0), avec installateur uniquement.** Les [contrôles Rust et React](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/41024936936) et la [validation Windows complète](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/41024944676) ont réussi sur le même commit : 93 tests Rust Windows, 22 tests frontend, 39 scénarios Playwright et 27 contrôles de livraison, plus le parcours natif sur l’application réellement installée. Ces contrôles utilisent des données fictives ; la validation métier des fichiers réels reste nécessaire. L'aperçu Pages utilise également des données fictives et ne traite aucun fichier personnel.
 
 ## Finalité métier
 
@@ -27,7 +27,7 @@ Les règles dépendent du dictionnaire et du processus de l'organisation utilisa
 
 Windows x64 avec WebView2. L'exécutable ne nécessite ni Python, ni Node, ni Rust, ni Microsoft Excel. L'ancienne application et cette version peuvent coexister.
 
-1. Télécharger manuellement l'installateur Windows x64 depuis les [releases vérifiées](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases). À partir de 2.1.0, seul l'installateur `FDX-Atelier-<version>-Windows-x64-installation.exe` sera distribué, accompagné du manifeste `BUILD.json` et de `SHA256SUMS.txt`. Aucune archive portable ne sera produite. L'installateur vérifie WebView2 et peut nécessiter Internet si ce composant manque. Les anciennes releases et leurs actifs restent inchangés.
+1. Télécharger manuellement l'[installateur Windows 2.1.0](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/download/v2.1.0/FDX-Atelier-2.1.0-Windows-x64-installation.exe). À partir de 2.1.0, seul l'installateur `FDX-Atelier-<version>-Windows-x64-installation.exe` est distribué, accompagné du manifeste `BUILD.json` et de `SHA256SUMS.txt`. Aucune archive portable n'est produite. L'installateur vérifie WebView2 et peut nécessiter Internet si ce composant manque. Les anciennes releases et leurs actifs restent inchangés.
 2. Lancer l'application et choisir **Essayer un exemple** pour découvrir le fonctionnement sur des données fictives.
 3. Choisir **Nouveau projet**, puis sélectionner un classeur `.xlsx` ou un modèle `.xltx` et son dictionnaire `.md` ou `.txt`. L’aperçu se consulte sur demande. Le nom et la famille du projet sont demandés lors de l’enregistrement.
 

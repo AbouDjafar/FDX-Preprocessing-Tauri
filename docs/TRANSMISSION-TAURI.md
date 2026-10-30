@@ -2,11 +2,11 @@
 
 ## Etat et objectif
 
-FDX Atelier 2.1.0 en validation : React/TypeScript, Tauri 2, moteur entierement Rust. Distribution par installateur uniquement. Le code Python conserve sert d'oracle de test, jamais de runtime distribue. Ne pas confondre presence de code, build reussi et release validee. Lire les resultats Actions du commit concerne avant toute affirmation de recette.
+FDX Atelier 2.1.0 livree : React/TypeScript, Tauri 2, moteur entierement Rust. Distribution par installateur uniquement. Le code Python conserve sert d'oracle de test, jamais de runtime distribue. Ne pas confondre presence de code, build reussi et release validee. Lire les resultats Actions du commit concerne avant toute affirmation de recette.
 
 Correctifs 2.1 : creation directe vers import ; nom/famille a la sauvegarde via commande metadata sans invalider l'analyse ; choix enregistrer/ignorer/annuler avant remplacement ou fermeture native ; apercu sur demande ; titre/etapes fixes et retour en haut ; animations reduites si preference systeme ; infobulles masquees derriere les modales. Version visible issue de web/package.json, coherence des manifestes/lockfiles verifiee en CI. Identifiants techniques stables pour les projets et mises a jour.
 
-Release : https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0 ; commit exact `c80275963ef9ca5976800a27d7188b36a373d38c`. Runs reussis : checks `40359754161`, Windows `40359786062`, publication sans recompilation `40362120944`. Verification : 81 tests Rust Windows, 19 tests frontend, 23 scenarios Playwright, 7 comparaisons independantes avec l'oracle Python ; parcours natif avec vrai dialogue Windows, telephone multiple, export rouvert, source intacte et projet repris. Recette sur donnees fictives, pas de certification de fichiers metier prives.
+Release : https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.1.0 ; commit exact `cfca6f2e52d4cd9ff32414ea2c740018945e1117`. Runs reussis : checks `41024936936`, Windows `41024944676`, publication sans recompilation `41026416936`. Verification : 93 tests Rust Windows, 22 tests frontend, 39 scenarios Playwright, 27 controles de livraison, 7 comparaisons independantes avec l'oracle Python ; application reellement installee, vrai dialogue Windows, telephone multiple, export rouvert, source intacte, projet repris, fermeture annulee puis approuvee. Recette sur donnees fictives, pas de certification de fichiers metier prives.
 
 Finalite : preparation de classeurs de passation/signature/execution des marches publics selon un dictionnaire confirme. Aucune certification juridique ; source et decisions metier font autorite. Une intuition n'autorise pas une correction.
 
@@ -46,6 +46,8 @@ Profils JSON sans chemins personnels ; mappings reconfirmes. Projets SQLite cont
 Les binaires sont telecharges manuellement par l'utilisateur. Ne jamais telecharger/installer/lancer une release sur son PC sans nouvelle demande. Aucun classeur prive sur les runners. Aucun chemin personnel, token ou journal sensible dans docs/issues. Le serveur de developpement Playwright existe uniquement dans la CI, jamais dans l'application distribuee.
 
 Piege CI Windows : WebView2 150+ ignore les arguments de debogage transmis par environnement depuis un processus eleve. `native_smoke.py` attache le pilote Microsoft correspondant au runtime a un port loopback, active une politique HKLM limitee au nom de l'executable sur le runner jetable et la restaure en sortie. Aucune option de debogage ajoutee au logiciel livre. `native_save_dialog.ps1` pilote le vrai dialogue via clavier : les controles peuvent etre exposes comme panes sans patterns UIA, et WM_SETTEXT seul ne met pas a jour le modele interne du dialogue. Ne pas remplacer `__TAURI_INTERNALS__.invoke`, protege en lecture seule par Tauri. Reference : https://github.com/MicrosoftEdge/WebView2Feedback/issues/5645.
+
+Verification NSIS : Tauri remplace le marqueur binaire UNK par NSS lors du conditionnement puis restaure l'executable non installe. `installed_binary_proof` reproduit exactement ce remplacement unique et refuse toute autre difference d'octets ; les essais natifs utilisent une copie de l'executable installe, pas le binaire brut de compilation. Les empreintes sont conservees dans les preuves Actions. Ne pas supprimer ce controle pour contourner un ecart d'empreinte.
 
 ## Reprise rapide
 

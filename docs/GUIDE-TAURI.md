@@ -12,7 +12,7 @@ La demonstration GitHub Pages utilise exclusivement des exemples fictifs. Elle n
 
 ## Parcours
 
-1. Creer un projet ou essayer l'exemple fictif. Importer un `.xlsx` et un dictionnaire `.md` ou `.txt`. Confirmer la feuille de donnees et la ligne d'en-tete en examinant l'apercu.
+1. Choisir Nouveau projet pour entrer directement dans l'import, ou essayer l'exemple fictif. Importer un `.xlsx` ou un modele `.xltx` et un dictionnaire `.md` ou `.txt`. Confirmer la feuille et la ligne d'en-tete. Le bouton Voir l'apercu ouvre l'echantillon ; il reste masque tant que ce bouton n'est pas utilise.
 2. Verifier les champs et les associations de colonnes. Les suggestions doivent etre confirmees. Les colonnes ignorees conservent leurs valeurs.
 3. Choisir les regles : separateurs des nombres, ordre des dates, telephones, remplacements, segmentation et chronologie. Les reglages avances partagent les memes parametres que le parcours guide.
 4. Analyser toutes les lignes. Examiner les anomalies et les changements prepares. Une decision peut conserver, corriger ou vider une cellule ; elle ne supprime jamais la ligne. Verifier les corrections apres les decisions, y compris apres annulation ou retablissement.
@@ -30,6 +30,8 @@ La demonstration GitHub Pages utilise exclusivement des exemples fictifs. Elle n
 
 Un profil JSON reutilise des regles sans embarquer les fichiers sources. Ses associations doivent etre reconfirmees. Un projet `.fdxproj` conserve une copie des sources, les parametres et les decisions ; ce fichier contient donc des donnees confidentielles, non chiffrees. Garder les projets dans un emplacement adapte.
 
+Le nom et la famille de donnees sont demandes lors de l'enregistrement, pas au demarrage. Avant de fermer l'application ou de remplacer un travail non enregistre, choisir Enregistrer et continuer, Continuer sans enregistrer ou Annuler. Les choix d'import restent disponibles apres un retour a l'accueil ; les confirmer avec Importer et associer avant d'enregistrer le projet.
+
 Les anciens projets v1 sont lus sans etre modifies et necessitent une nouvelle analyse. Choisir un nouveau nom pour les sauvegarder au format actuel. Les resultats caches de l'ancienne version ne sont pas consideres comme une verification Rust. Le nom visible FDX Atelier ne change ni l'identifiant de l'application ni le format des projets.
 
 `Controle` contient le dictionnaire et les indicateurs, `Nom_original` les valeurs avant modification, `A verifier` les anomalies encore presentes. Leurs noms dans Excel conservent les accents. Des suffixes preservent les feuilles homonymes existantes, sauf remplacement explicitement autorise.
@@ -40,4 +42,4 @@ Sans rapports, la structure source est conservee. Dans tous les cas, l'orientati
 
 Une source modifiee exige une nouvelle importation. Un resultat perime exige une nouvelle analyse. Pour un fichier de sortie verrouille, le fermer dans Excel ou choisir un autre nom. Une annulation ou un echec de verification ne doit pas publier un fichier incomplet.
 
-Les macros, fichiers `.xls`, classeurs chiffres et objets avances non conservables sont refuses. Ne pas contourner ces refus en renommant simplement l'extension.
+Les formats a macros, fichiers binaires `.xls`/`.xlsb`, classeurs chiffres et objets avances non conservables sont refuses. Une fenetre explique la cause et les actions possibles : ouvrir une copie dans Excel ou LibreOffice, la reparer si necessaire, verifier les donnees et objets conserves, enregistrer puis recharger la copie. Ne jamais supprimer des macros utiles sans decision explicite ni convertir en renommant seulement l'extension. La sortie des sources `.xlsx` et `.xltx` est un classeur `.xlsx` verifie.
