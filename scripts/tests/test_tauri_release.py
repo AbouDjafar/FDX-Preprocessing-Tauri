@@ -317,7 +317,7 @@ class InstallerResourcesTests(unittest.TestCase):
             with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}), patch.object(
                     release.subprocess, 'check_output', return_value=json.dumps(metadata).encode()) as cargo:
                 runpy.run_path(str(destination), run_name='__main__')
-            cargo.assert_called_once_with(['cargo', 'metadata', '--locked', '--format-version', '1'], cwd=root)
+            cargo.assert_called_once_with(['cargo', 'metadata', '--locked', '--format-version', '1'], cwd=root.resolve())
             licenses = root / 'qa/licenses'
             self.assertEqual((licenses / 'example-rust-1.0.0/LICENSE').read_text(), 'Synthetic Rust license text')
             self.assertEqual((licenses / 'example-js-1.0.0/LICENSE').read_text(), 'Synthetic JavaScript license text')

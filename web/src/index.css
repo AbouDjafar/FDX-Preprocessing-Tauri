@@ -74,6 +74,9 @@ main:focus { outline: none; }
 .btn-primary { background: var(--green); border-color: var(--green); color: #fbf7ed; }
 .btn-primary:hover:not(:disabled) { background: #326052; border-color: #326052; }
 .icon-btn { width: 38px; height: 38px; padding: 0; flex-shrink: 0; transition: background .15s, border-color .15s, box-shadow .18s; }
+.btn > svg { transition: transform .18s ease, scale .12s ease; }
+.btn:hover:not(:disabled) > svg { transform: translateY(-1px); }
+.btn:active:not(:disabled) > svg { transform: translateY(0); scale: .9; }
 .icon-btn > svg { transition: transform .18s ease, scale .12s ease; }
 .icon-btn:hover:not(:disabled), .icon-btn:focus-visible { box-shadow: 0 2px 5px #203b3614; }
 .icon-btn:hover:not(:disabled) > svg { transform: translateY(-1px); }
@@ -326,7 +329,7 @@ progress { display: block; width: 100%; height: 7px; accent-color: #315e50; marg
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .icon-btn:hover:not(:disabled) > svg, .icon-btn:active:not(:disabled) > svg { transform: none; scale: none; }
+  .btn:hover:not(:disabled) > svg, .btn:active:not(:disabled) > svg { transform: none; scale: none; }
 }
 @media (forced-colors: active) {
   .btn, .step-num, input.toggle { border: 1px solid ButtonText; }

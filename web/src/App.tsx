@@ -54,6 +54,9 @@ export default function App() {
   const saveProject = async (): Promise<boolean> => {
     if (!w.session) return false;
     if (!w.session.workbook) throw { code: 'PROJECT_NO_SOURCE', message: 'Confirmez d’abord le classeur et sa feuille avec « Importer et associer », puis enregistrez le projet.' };
+    const pending = w.importDraft;
+    const config = w.session.config;
+    if (pending && (pending.path !== config.source_path || pending.dictionary !== config.dictionary_path || pending.sheet !== config.sheet || pending.header !== config.header_row)) throw { code: 'IMPORT_PENDING', message: 'Des choix d’import ne sont pas encore confirmés. Revenez à « Importer », cliquez sur « Importer et associer », puis enregistrez le projet.' };
     const details = await requestDetails(); if (!details) return false;
     const suggested = `${details.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')}_copie.fdxproj`;
     const path = await selectFile(w.mode, 'project', true, suggested); if (!path) return false;

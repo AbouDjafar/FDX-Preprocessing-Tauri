@@ -39,6 +39,20 @@ test('can cancel or save unsaved work before replacing a project', async ({ page
   await expect(page.locator('.project-row').first()).toContainText('Exemple conservé');
 });
 
+test('keeps pending import choices when returning home without warning for an empty project', async ({ page }) => {
+  await page.goto('/'); await page.getByTestId('create-project').click();
+  await page.getByRole('button', { name: 'Vue d’ensemble', exact: true }).click();
+  await page.getByTestId('create-project').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Choisir l’exemple', exact: true }).click();
+  await page.getByRole('button', { name: 'Dictionnaire', exact: true }).click();
+  await page.getByRole('button', { name: 'Vue d’ensemble', exact: true }).click();
+  await page.getByRole('button', { name: 'Reprendre le projet', exact: true }).click();
+  await expect(page.getByLabel('Feuille de calcul', { exact: true })).toHaveValue('Marchés fictifs');
+  await expect(page.getByRole('button', { name: 'Importer et associer', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Retirer le dictionnaire sélectionné', exact: true })).toBeVisible();
+});
+
 test('resets scrolling between stages and keeps the stage header available', async ({ page }, info) => {
   await page.goto('/'); await page.getByTestId('try-demo').click();
   await page.getByTestId('stage-traitements').click();

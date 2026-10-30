@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
-import { analysisConfig, configIssues, normalizeError, readOps, sessionOps, type FdxError, type Op, type Operations, type Progress, type ProjectConfig, type RecentProject, type Session } from './model';
+import { analysisConfig, configIssues, normalizeError, readOps, sessionOps, type FdxError, type Op, type Operations, type Progress, type ProjectConfig, type RecentProject, type Session, type WorkbookInfo } from './model';
 import { createAdapter, type Adapter } from './services/bridge';
 import { Button, Modal } from './components/ui';
 
 type Run = <K extends Op>(op: K, payload: Operations[K]['payload'], quiet?: boolean) => Promise<Operations[K]['result']>;
 type Task = { id: string; op: Op; progress: Progress | null; cancelling: boolean };
+export type ImportSelection = { sessionId: string; info: WorkbookInfo | null; path: string; dictionary: string; sheet: string; header: number; inspectedHeader: number };
 interface Workspace {
   mode: Adapter['mode']; session: Session | null; draft: ProjectConfig | null; edited: boolean; unsaved: boolean; decisionsReady: boolean;
   edit: (update: (config: ProjectConfig) => ProjectConfig) => void; task: Task | null; busy: boolean;
@@ -14,6 +15,7 @@ interface Workspace {
   saveDraft: () => Promise<void>; analyze: () => Promise<void>; recent: RecentProject[]; refreshRecent: () => Promise<void>;
   confirm: (title: string, message: string, accept?: string) => Promise<boolean>;
   toast: string; notify: (text: string) => void;
+  importDraft: ImportSelection | null; updateImportDraft: (value: ImportSelection) => void;
 }
 const Context = createContext<Workspace | null>(null);
 export const useWorkspace = () => { const value = useContext(Context); if (!value) throw new Error('Workspace absent'); return value; };
@@ -30,6 +32,7 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
   const [toast, notify] = useState('');
   const [recent, setRecent] = useState<RecentProject[]>([]);
   const [unsaved, setUnsaved] = useState(false);
+  const [importDraft, setImportDraft] = useState<ImportSelection | null>(null);
   const [analyzedConfig, setAnalyzedConfig] = useState<string | null>(null);
   const [question, setQuestion] = useState<{ title: string; message: string; accept: string; resolve: (yes: boolean) => void } | null>(null);
   const questionRef = useRef(question); questionRef.current = question;
@@ -55,7 +58,8 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
         if (!next || typeof next.id !== 'string' || typeof next.revision !== 'number' || !next.config) throw { code: 'INVALID_RESPONSE', message: 'Réponse du moteur incompatible.', details: { op } };
         if (sessionRef.current?.id !== base?.id || sessionRef.current?.revision !== base?.revision) throw { code: 'STALE_RESPONSE', message: 'Résultat périmé ignoré. Le projet a changé.' };
         if (base?.id === next.id && next.revision < base.revision) throw { code: 'STALE_RESPONSE', message: 'Révision périmée ignorée.' };
-        sessionRef.current = next; setSession(next); draftRef.current = structuredClone(next.config); setDraft(draftRef.current); setUnsaved(op !== 'project_open');
+        sessionRef.current = next; setSession(next); draftRef.current = structuredClone(next.config); setDraft(draftRef.current); setUnsaved(op !== 'project_open' && op !== 'create');
+        if (['create', 'demo', 'import', 'project_open'].includes(op)) setImportDraft(null);
         if (op === 'analyze') setAnalyzedConfig(analysisConfig(next.config));
         else if (['import', 'demo', 'create', 'project_open'].includes(op)) setAnalyzedConfig(null);
       } else if (op === 'project_save' || op === 'export') {
@@ -77,6 +81,13 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
   const edit = useCallback((update: (config: ProjectConfig) => ProjectConfig) => {
     if (!draftRef.current || locked.current) return;
     draftRef.current = update(draftRef.current); setDraft(draftRef.current);
+  }, []);
+  const updateImportDraft = useCallback((value: ImportSelection) => {
+    const current = sessionRef.current;
+    if (!current || current.id !== value.sessionId) return;
+    setImportDraft(value);
+    const config = current.config;
+    if (value.path !== config.source_path || value.dictionary !== config.dictionary_path || value.sheet !== config.sheet || value.header !== config.header_row) setUnsaved(true);
   }, []);
   const saveDraft = useCallback(async () => {
     if (!draftRef.current || !sessionRef.current) return;
@@ -105,7 +116,7 @@ export function WorkspaceProvider({ children, adapter: injected }: { children: R
     const guard = (e: BeforeUnloadEvent) => { if (adapter.mode !== 'desktop' && (edited || unsaved || task)) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard);
   }, [adapter.mode, edited, unsaved, task]);
-  return <Context.Provider value={{ mode: adapter.mode, session, draft, edited, unsaved, decisionsReady, edit, task, busy: !!task, error, reportError, clearError: () => setError(null), run, act, cancel, saveDraft, analyze, recent, refreshRecent, confirm, toast, notify }}>
+  return <Context.Provider value={{ mode: adapter.mode, session, draft, edited, unsaved, decisionsReady, edit, task, busy: !!task, error, reportError, clearError: () => setError(null), run, act, cancel, saveDraft, analyze, recent, refreshRecent, confirm, toast, notify, importDraft, updateImportDraft }}>
     {children}
     {question && <Modal title={question.title} onClose={() => answer(false)}><p className="dialog-message">{question.message}</p><footer className="modal-footer"><Button icon={X} onClick={() => answer(false)}>Annuler</Button><Button icon={Check} primary onClick={() => answer(true)}>{question.accept}</Button></footer></Modal>}
   </Context.Provider>;

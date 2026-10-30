@@ -15,7 +15,7 @@ export function ExportStage({ back }: { back: () => void }) {
   const exportFile = () => w.act(async () => {
     if (!ready) return;
     await w.saveDraft();
-    const path = await selectFile(w.mode, 'export', true, `${filename(config.original_path || config.source_path).replace(/\.xlsx$/i, '')}_fiabilise.xlsx`);
+    const path = await selectFile(w.mode, 'export', true, `${filename(config.original_path || config.source_path).replace(/\.(xlsx|xltx)$/i, '')}_fiabilise.xlsx`);
     if (!path) return;
     if (!await w.confirm('Exporter le classeur ?', `${filename(path)} · ${session.summary!.findings} anomalie(s) conservée(s). ${overwrite ? 'Vous autorisez explicitement le remplacement du fichier de destination s’il existe.' : 'Un fichier de destination existant ne sera pas remplacé.'}`, 'Exporter et vérifier')) return;
     await w.run('export', { path, allow_issues: allowIssues, overwrite }); w.notify('Export terminé et vérifié par le moteur.');

@@ -10,18 +10,20 @@ const sourcePattern = /\.(xlsx|xltx|xlsm|xltm|xls|xlsb|xlt|xla|xlam)$/i;
 export function ImportStage({ next }: { next: () => void }) {
   const w = useWorkspace();
   const session = w.session!;
-  const [info, setInfo] = useState<WorkbookInfo | null>(session.workbook);
-  const [path, setPath] = useState(session.config.source_path);
-  const [dictionary, setDictionary] = useState(session.config.dictionary_path);
-  const [sheet, setSheet] = useState(session.config.sheet);
-  const [header, setHeader] = useState(session.config.header_row);
-  const [inspectedHeader, setInspectedHeader] = useState(session.config.header_row);
+  const pending = w.importDraft?.sessionId === session.id ? w.importDraft : null;
+  const [info, setInfo] = useState<WorkbookInfo | null>(pending?.info ?? session.workbook);
+  const [path, setPath] = useState(pending?.path ?? session.config.source_path);
+  const [dictionary, setDictionary] = useState(pending?.dictionary ?? session.config.dictionary_path);
+  const [sheet, setSheet] = useState(pending?.sheet ?? session.config.sheet);
+  const [header, setHeader] = useState(pending?.header ?? session.config.header_row);
+  const [inspectedHeader, setInspectedHeader] = useState(pending?.inspectedHeader ?? session.config.header_row);
   const [hovering, setHovering] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const previewId = useId();
   const selected = info?.sheets.find(s => s.name === sheet);
   const sourceExtension = /\.[^./\\]+$/.exec(path)?.[0].toLowerCase();
   const previewReady = !!selected && header === inspectedHeader && header <= selected.rows;
+  useEffect(() => { w.updateImportDraft({ sessionId: session.id, info, path, dictionary, sheet, header, inspectedHeader }); }, [session.id, info, path, dictionary, sheet, header, inspectedHeader, w.updateImportDraft]);
   useEffect(() => { setPreviewVisible(false); }, [path, sheet, header]);
   const inspect = async (source: string, row = header) => {
     setPreviewVisible(false);
