@@ -1461,7 +1461,9 @@ fn export_excel_inner(
     let reopened = read_bounded(temp.path(), MAX_FILE, job)?;
     let actual = Package::from_bytes(&reopened, job)?;
     if actual.format(job)? != WorkbookFormat::Workbook {
-        return Err(error("Le contenu exporte ne correspond pas a l'extension .xlsx."));
+        return Err(error(
+            "Le contenu exporte ne correspond pas a l'extension .xlsx.",
+        ));
     }
     verify(
         &package, &actual, &original, &source, config, &changes, &reports, job,
@@ -1480,7 +1482,8 @@ fn export_excel_inner(
     }
     drop(reopened_book);
     job.report("export", 4, Some(5), "Verification finale de la source");
-    if hash_file(source_path, job).map_err(|e| source_error(source_path, e))? != result.source_hash {
+    if hash_file(source_path, job).map_err(|e| source_error(source_path, e))? != result.source_hash
+    {
         return Err(error(
             "La source a change pendant l'export ; fichier final non publie.",
         ));

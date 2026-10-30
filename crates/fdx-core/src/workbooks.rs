@@ -77,7 +77,9 @@ pub(crate) fn source_error(path: &Path, cause: FdxError) -> FdxError {
         }
         _ => WORKBOOK_RECOVERY,
     };
-    error(format!("Lecture du classeur '{name}' impossible : {cause} {action}"))
+    error(format!(
+        "Lecture du classeur '{name}' impossible : {cause} {action}"
+    ))
 }
 
 pub(crate) fn read_source_package(path: &Path, job: &JobControl) -> Result<(Vec<u8>, Package)> {
@@ -784,8 +786,11 @@ impl Package {
             vec![(
                 node.start,
                 node.open_end,
-                node.tag(&[("ContentType", Some(WORKBOOK_CONTENT.into()))], node.empty)
-                    .into_bytes(),
+                node.tag(
+                    &[("ContentType", Some(WORKBOOK_CONTENT.into()))],
+                    node.empty,
+                )
+                .into_bytes(),
             )],
         )?;
         self.parts.insert("[Content_Types].xml".into(), bytes);

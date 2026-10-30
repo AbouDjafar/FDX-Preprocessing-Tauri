@@ -286,7 +286,9 @@ impl AppState {
                 let name = text(p, "name")?.trim();
                 let family = text(p, "family")?.trim();
                 if name.chars().count() > 200 || family.chars().count() > 100 {
-                    return Err(error("Le nom est limite a 200 caracteres et la famille a 100 caracteres."));
+                    return Err(error(
+                        "Le nom est limite a 200 caracteres et la famille a 100 caracteres.",
+                    ));
                 }
                 s.name = name.to_owned();
                 s.family = family.to_owned();
@@ -708,17 +710,36 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let app = AppState::new(root.path().to_owned()).unwrap();
         let analyzed = analyzed_demo(&app);
-        let renamed = command(&app, "metadata", &analyzed, json!({"name":"  Suivi prepare  ","family":"Passation"}));
+        let renamed = command(
+            &app,
+            "metadata",
+            &analyzed,
+            json!({"name":"  Suivi prepare  ","family":"Passation"}),
+        );
         assert_eq!(renamed["name"], "Suivi prepare");
         assert_eq!(renamed["family"], "Passation");
         assert_eq!(renamed["summary"], analyzed["summary"]);
         assert_eq!(renamed["dirty"], false);
         let path = root.path().join("suivi.fdxproj");
         command(&app, "project_save", &renamed, json!({"path":path}));
-        let opened = app.execute(request("project_open", None, json!({"path":path})), &JobControl::default()).unwrap();
+        let opened = app
+            .execute(
+                request("project_open", None, json!({"path":path})),
+                &JobControl::default(),
+            )
+            .unwrap();
         assert_eq!(opened["name"], "Suivi prepare");
         assert_eq!(opened["family"], "Passation");
-        assert!(app.execute(request("metadata", Some(&renamed), json!({"name":" ","family":"Passation"})), &JobControl::default()).is_err());
+        assert!(app
+            .execute(
+                request(
+                    "metadata",
+                    Some(&renamed),
+                    json!({"name":" ","family":"Passation"})
+                ),
+                &JobControl::default()
+            )
+            .is_err());
     }
 
     fn snapshot(app: &AppState, view: &Value) -> Session {
