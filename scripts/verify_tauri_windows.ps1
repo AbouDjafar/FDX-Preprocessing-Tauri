@@ -15,6 +15,7 @@ $licenses = Join-Path $root 'qa\licenses'
 $notices = Get-Content -LiteralPath (Join-Path $licenses 'DEPENDENCIES.json') -Raw | ConvertFrom-Json
 if (@($notices).Count -eq 0 -or @($notices | Where-Object { $_.texts -gt 0 }).Count -eq 0) { throw 'Dependency license texts missing.' }
 $oldPath = $env:PATH
+$python = (Get-Command python).Source
 $running = $null
 try {
     $env:PATH = "$env:WINDIR\System32;$env:WINDIR"
@@ -26,8 +27,13 @@ try {
     if ($process.ExitCode -ne 0) { throw 'Installer failed.' }
     $binary = Join-Path $destination 'fdx-atelier-tauri.exe'
     if (!(Test-Path -LiteralPath $binary)) { throw 'Installed executable missing.' }
-    $builtHash = (Get-FileHash -LiteralPath (Join-Path $root 'target\release\fdx-atelier-tauri.exe') -Algorithm SHA256).Hash
-    if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -cne $builtHash) { throw 'Installed executable differs from the verified build.' }
+    $proofJson = & $python (Join-Path $PSScriptRoot 'promote_tauri.py') --verify-installed (Join-Path $root 'target\release\fdx-atelier-tauri.exe') $binary
+    if ($LASTEXITCODE -ne 0) { throw 'Installed executable does not match the compiled application and documented NSIS marker.' }
+    $proof = $proofJson | ConvertFrom-Json
+    $nativeDirectory = Join-Path $root 'qa\installed-app'
+    New-Item -ItemType Directory -Path $nativeDirectory | Out-Null
+    Copy-Item -LiteralPath $binary -Destination $nativeDirectory
+    $proofJson | Set-Content -LiteralPath (Join-Path $root 'qa\installed-binary.json') -Encoding utf8
     foreach ($source in Get-ChildItem -LiteralPath $licenses -File -Recurse) {
         $relative = [IO.Path]::GetRelativePath($licenses, $source.FullName)
         $installed = Join-Path (Join-Path $destination 'licenses') $relative
@@ -64,7 +70,7 @@ try {
     while ((Test-Path -LiteralPath $binary) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
     if (Test-Path -LiteralPath $binary) { throw 'Uninstaller left the application executable installed.' }
     if (Test-Path -LiteralPath $registration) { throw 'Uninstaller left the product registered.' }
-    @{ok=$true; version=$version; commit=$commit; installer_sha256=$installerHash; licenses_verified=$true; upgrade_registration_verified=$true; no_developer_path=$true; installed=$true; uninstalled=$true} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'qa\installation.json') -Encoding utf8
+    @{ok=$true; version=$version; commit=$commit; installer_sha256=$installerHash; installed_binary_sha256=$proof.installed_binary_sha256; binary_verified=$proof.binary_verified; licenses_verified=$true; upgrade_registration_verified=$true; no_developer_path=$true; installed=$true; uninstalled=$true} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'qa\installation.json') -Encoding utf8
 } finally {
     if ($running -and !$running.HasExited) { Stop-Process -Id $running.Id -ErrorAction SilentlyContinue }
     $env:PATH = $oldPath

@@ -12,7 +12,7 @@ if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer.' }
 $installer = $installers[0]
 $installerHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 $installation = Get-Content -LiteralPath (Join-Path $root 'qa\installation.json') -Raw | ConvertFrom-Json
-if ($installation.ok -ne $true -or $installation.installed -ne $true -or $installation.uninstalled -ne $true -or
+if ($installation.ok -ne $true -or $installation.installed -ne $true -or $installation.uninstalled -ne $true -or $installation.binary_verified -ne $true -or
     $installation.licenses_verified -ne $true -or $installation.upgrade_registration_verified -ne $true -or $installation.version -cne $version -or
     $installation.commit -cne $commit -or $installation.installer_sha256 -cne $installerHash) { throw 'Installer does not match successful installation and license verification.' }
 foreach ($report in @('qa\parity.json', 'qa\native\verification.json')) {

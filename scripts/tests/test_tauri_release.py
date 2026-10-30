@@ -20,6 +20,23 @@ RUN = {'id': 123, 'run_attempt': 1, 'status': 'completed', 'conclusion': 'succes
        'html_url': 'https://github.com/example/fdx/actions/runs/123'}
 
 
+class InstalledBinaryTests(unittest.TestCase):
+    def test_only_the_documented_nsis_marker_changes(self):
+        built = b'MZsynthetic-executable\0__TAURI_BUNDLE_TYPE_VAR_UNK\0payload'
+        installed = built.replace(b'_VAR_UNK', b'_VAR_NSS', 1)
+        proof = release.installed_binary_proof(built, installed)
+        self.assertTrue(proof['binary_verified'])
+        self.assertEqual(proof['installed_binary_sha256'], hashlib.sha256(installed).hexdigest())
+        for invalid in (built, installed + b'changed', installed.replace(b'payload', b'tampered')):
+            with self.assertRaisesRegex(ValueError, 'differs beyond'):
+                release.installed_binary_proof(built, invalid)
+
+    def test_missing_marker_or_non_pe_input_is_refused(self):
+        for built in (b'MZ-no-marker', b'__TAURI_BUNDLE_TYPE_VAR_UNK'):
+            with self.assertRaisesRegex(ValueError, 'expected Tauri bundle marker'):
+                release.installed_binary_proof(built, built)
+
+
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding='utf-8')

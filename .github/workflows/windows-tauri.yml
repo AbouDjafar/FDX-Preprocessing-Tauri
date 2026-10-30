@@ -100,7 +100,7 @@ jobs:
         run: .\scripts\verify_tauri_windows.ps1
       - name: Native application end-to-end
         timeout-minutes: 6
-        run: python scripts/native_smoke.py target/release/fdx-atelier-tauri.exe qa/driver/msedgedriver.exe
+        run: python scripts/native_smoke.py qa/installed-app/fdx-atelier-tauri.exe qa/driver/msedgedriver.exe
       - name: Frontend visual scenarios
         working-directory: web
         run: |
@@ -127,5 +127,6 @@ jobs:
           name: windows-verification-${{ github.sha }}
           path: |
             qa/
+            !qa/installed-app/**
             web/test-results/
             web/playwright-report/

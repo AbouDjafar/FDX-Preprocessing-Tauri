@@ -49,6 +49,21 @@ def installer_name(version):
     return f'FDX-Atelier-{version}-Windows-x64-installation.exe'
 
 
+def installed_binary_proof(built, installed):
+    # Tauri patches this marker for NSIS, then restores the unbundled build.
+    # Match its first-occurrence patch exactly; no other byte difference is allowed.
+    # https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-bundler/src/bundle.rs
+    token = b'__TAURI_BUNDLE_TYPE_VAR_UNK'
+    if not built.startswith(b'MZ') or token not in built:
+        raise ValueError('Compiled Windows binary has no expected Tauri bundle marker.')
+    expected = built.replace(token, b'__TAURI_BUNDLE_TYPE_VAR_NSS', 1)
+    if installed != expected:
+        raise ValueError('Installed executable differs beyond the documented NSIS bundle marker.')
+    return {'binary_verified': True, 'bundle_type': 'nsis',
+            'built_binary_sha256': hashlib.sha256(built).hexdigest(),
+            'installed_binary_sha256': hashlib.sha256(installed).hexdigest()}
+
+
 def gh(*args, json_output=False):
     result = subprocess.run(['gh', *args], check=True, capture_output=True, text=True)
     return json.loads(result.stdout) if json_output else result.stdout.strip()
@@ -152,10 +167,13 @@ def promote(source_root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check-manifests', action='store_true')
+    parser.add_argument('--verify-installed', nargs=2, type=Path, metavar=('BUILT', 'INSTALLED'))
     parser.add_argument('--source-root', type=Path, default=ROOT)
     args = parser.parse_args()
     try:
-        if args.check_manifests:
+        if args.verify_installed:
+            print(json.dumps(installed_binary_proof(*(path.read_bytes() for path in args.verify_installed))))
+        elif args.check_manifests:
             print(release_version(args.source_root))
         else:
             promote(args.source_root)
