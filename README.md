@@ -1,12 +1,12 @@
-# FDX Atelier Tauri
+# FDX Atelier
 
 **Préparation et contrôle de données Excel pour le suivi métier des marchés publics.**
 
-FDX Atelier Tauri est une application Windows en français destinée aux équipes qui préparent des données administratives pour le contrôle de gestion, le reporting et l'analyse des marchés publics. Elle harmonise les fichiers selon un dictionnaire de données validé et conserve les anomalies qui nécessitent une décision humaine. Cette version utilise React et un moteur Rust local, sans Python embarqué.
+FDX Atelier est une application Windows en français destinée aux équipes qui préparent des données administratives pour le contrôle de gestion, le reporting et l'analyse des marchés publics. Elle harmonise les fichiers selon un dictionnaire de données validé et conserve les anomalies qui nécessitent une décision humaine. Cette version utilise React et un moteur Rust local, sans Python embarqué.
 
 [Versions vérifiées](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases) · [Aperçu de l'interface](https://aboudjafar.github.io/FDX-Preprocessing-Tauri/) · [Guide utilisateur](docs/GUIDE-TAURI.md) · [Transmission](docs/TRANSMISSION-TAURI.md)
 
-**Version 2.0.0 disponible pour Windows x64.** Les [contrôles Rust et React](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359754161) et la [validation Windows complète](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359786062) ont réussi sur le même commit : tests métier, conservation Excel, parcours natif avec export réel, reprise de projet, installation et désinstallation. Ces contrôles utilisent des données fictives ; la validation métier des fichiers réels reste nécessaire. L'aperçu Pages utilise également des données fictives et ne traite aucun fichier personnel.
+**Version 2.1.0 en préparation pour Windows x64.** Sa publication exige les contrôles Rust/React et la validation Windows complète sur son commit exact. La dernière release publiée reste [2.0.0](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0), avec ses actifs inchangés : les [contrôles Rust et React](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359754161) et la [validation Windows complète](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions/runs/40359786062) avaient réussi sur le même commit. Ces contrôles utilisent des données fictives ; la validation métier des fichiers réels reste nécessaire. L'aperçu Pages utilise également des données fictives et ne traite aucun fichier personnel.
 
 ## Finalité métier
 
@@ -27,9 +27,9 @@ Les règles dépendent du dictionnaire et du processus de l'organisation utilisa
 
 Windows x64 avec WebView2. L'exécutable ne nécessite ni Python, ni Node, ni Rust, ni Microsoft Excel. L'ancienne application et cette version peuvent coexister.
 
-1. Télécharger manuellement l'[installateur Windows](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/download/v2.0.0/FDX-Atelier-Tauri-2.0.0-Windows-x64-installation.exe) ou l'[archive portable](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/download/v2.0.0/FDX-Atelier-Tauri-2.0.0-Windows-x64-portable.zip). Le portable utilise WebView2 déjà installé ; l'installateur vérifie sa présence et peut nécessiter Internet si ce composant manque. Le manifeste de construction et les empreintes SHA-256 sont disponibles dans la [release 2.0.0](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases/tag/v2.0.0).
+1. Télécharger manuellement l'installateur Windows x64 depuis les [releases vérifiées](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/releases). À partir de 2.1.0, seul l'installateur `FDX-Atelier-<version>-Windows-x64-installation.exe` sera distribué, accompagné du manifeste `BUILD.json` et de `SHA256SUMS.txt`. Aucune archive portable ne sera produite. L'installateur vérifie WebView2 et peut nécessiter Internet si ce composant manque. Les anciennes releases et leurs actifs restent inchangés.
 2. Lancer l'application et choisir **Essayer un exemple** pour découvrir le fonctionnement sur des données fictives.
-3. Pour un traitement métier, sélectionner un classeur `.xlsx` et son dictionnaire `.md` ou `.txt`, puis suivre les cinq étapes.
+3. Choisir **Nouveau projet**, puis sélectionner un classeur `.xlsx` ou un modèle `.xltx` et son dictionnaire `.md` ou `.txt`. L’aperçu se consulte sur demande. Le nom et la famille du projet sont demandés lors de l’enregistrement.
 
 | Étape | Décision attendue |
 |---|---|
@@ -61,6 +61,10 @@ La version actuelle traite un fichier et une feuille de données à la fois, jus
 Le moteur Rust indépendant se trouve dans `crates/fdx-core`, la CLI dans `crates/fdx-cli`, l'hôte natif dans `src-tauri` et le frontend dans `web`. Les dépendances sont verrouillées par `Cargo.lock` et `web/package-lock.json`. Le code Python historique reste uniquement une référence de comparaison pour les tests ; il n'est pas livré dans l'application Tauri.
 
 Les installations de dépendances, tests complets, compilations et conditionnements passent exclusivement par [GitHub Actions](https://github.com/AbouDjafar/FDX-Preprocessing-Tauri/actions). Les exécutables et installateurs sont distribués dans les releases, jamais dans l'historique Git. La publication réutilise un artefact vérifié au même commit, sans recompilation.
+
+La version de `web/package.json` sert au frontend et aux noms de livraison ; les versions Cargo, les lockfiles et la configuration native doivent correspondre avant compilation. Les licences tierces sont préparées dans `qa/licenses` sur le runner, incluses dans NSIS et vérifiées après installation. La publication exige un tag de version au commit exact du run Windows et des contrôles Rust/React réussis, puis vérifie la provenance et les empreintes de l'installateur et du manifeste. Elle refuse tout actif supplémentaire, notamment portable, et ne remplace jamais une release existante. Les noms techniques du dépôt, des modules et de l'exécutable, ainsi que l'identifiant de l'application, restent stables.
+
+Le changement de nom visible inclut une migration de l'ancienne inscription NSIS en mode mise à jour, sans demander la suppression des données de l'application. Le workflow Windows vérifie ce chemin avec une inscription fictive utilisant le nouvel installateur ; il ne télécharge ni ne modifie une ancienne release.
 
 Pour reprendre le développement, lire les [instructions du dépôt](AGENTS.md), puis la [transmission Tauri](docs/TRANSMISSION-TAURI.md). Le [mémo historique](docs/TRANSMISSION.md) décrit les règles métier d'origine et la version Python, pas l'architecture actuelle. Ce dépôt dérive de [FDX-Preprocessing](https://github.com/AbouDjafar/FDX-Preprocessing) et conserve son historique.
 

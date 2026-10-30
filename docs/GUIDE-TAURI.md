@@ -1,10 +1,12 @@
-# FDX Atelier Tauri
+# FDX Atelier
 
 Application locale de preparation de classeurs de suivi des marches publics : passation, marches signes et execution. Elle aide a verifier des donnees selon un dictionnaire metier ; elle ne certifie pas la regularite juridique d'un marche.
 
 ## Installation
 
-Telecharger manuellement l'installateur Windows x64 ou le portable dans les releases du depot. Le portable requiert WebView2, habituellement deja present sous Windows. L'installateur utilise le runtime present et propose son installation s'il manque ; cette derniere peut necessiter Internet. Python, Node et Rust ne sont pas necessaires. Les binaires ne sont pas signes avec un certificat commercial ; Windows peut demander une confirmation de provenance.
+Telecharger manuellement l'installateur Windows x64 dans les releases du depot. A partir de la version 2.1.0, seul l'installateur est distribue, accompagne de `BUILD.json` et `SHA256SUMS.txt` ; aucune archive portable n'est produite. Les actifs des anciennes releases restent inchanges. Le manifeste indique la version, le commit exact verifie et le run Actions ; les empreintes couvrent le manifeste et l'installateur.
+
+L'installateur utilise le runtime WebView2 present et propose son installation s'il manque ; cette derniere peut necessiter Internet. Python, Node et Rust ne sont pas necessaires. Les licences tierces et ce guide sont inclus dans l'installation. Les binaires ne sont pas signes avec un certificat commercial ; Windows peut demander une confirmation de provenance.
 
 La demonstration GitHub Pages utilise exclusivement des exemples fictifs. Elle ne lit pas les classeurs personnels et ne produit pas de fichier Excel traite. Utiliser l'application Windows pour les vrais fichiers.
 
@@ -28,7 +30,7 @@ La demonstration GitHub Pages utilise exclusivement des exemples fictifs. Elle n
 
 Un profil JSON reutilise des regles sans embarquer les fichiers sources. Ses associations doivent etre reconfirmees. Un projet `.fdxproj` conserve une copie des sources, les parametres et les decisions ; ce fichier contient donc des donnees confidentielles, non chiffrees. Garder les projets dans un emplacement adapte.
 
-Les anciens projets v1 sont lus sans etre modifies et necessitent une nouvelle analyse. Choisir un nouveau nom pour les sauvegarder au format Tauri. Les resultats caches de l'ancienne version ne sont pas consideres comme une verification Rust.
+Les anciens projets v1 sont lus sans etre modifies et necessitent une nouvelle analyse. Choisir un nouveau nom pour les sauvegarder au format actuel. Les resultats caches de l'ancienne version ne sont pas consideres comme une verification Rust. Le nom visible FDX Atelier ne change ni l'identifiant de l'application ni le format des projets.
 
 `Controle` contient le dictionnaire et les indicateurs, `Nom_original` les valeurs avant modification, `A verifier` les anomalies encore presentes. Leurs noms dans Excel conservent les accents. Des suffixes preservent les feuilles homonymes existantes, sauf remplacement explicitement autorise.
 

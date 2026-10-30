@@ -1,4 +1,4 @@
-name: Windows Tauri build and native verification
+name: FDX Atelier Windows build and native verification
 on:
   workflow_dispatch:
 permissions:
@@ -14,16 +14,22 @@ jobs:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: scripts/oracle-requirements.txt
+      - name: Release metadata and synthetic promotion checks
+        run: |
+          python scripts/promote_tauri.py --check-manifests
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m unittest discover -s scripts/tests -p 'test_tauri_release.py' -v
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -53,29 +59,36 @@ jobs:
       - name: Rust Windows tests and lint
         run: |
           cargo test --locked --workspace
-          $testsFailed = $LASTEXITCODE
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           cargo clippy --locked --workspace --all-targets -- -D warnings
-          if ($LASTEXITCODE -or $testsFailed) { exit 1 }
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/cache/restore@v4
         id: release_cache
         with:
           path: target/release
           key: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
-          restore-keys: windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
+          restore-keys: |
+            windows-release-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
+            windows-release-${{ runner.arch }}-
       - name: Build release and NSIS installer
         working-directory: src-tauri
         run: |
+          # A restored dependency cache may include an installer from an older commit.
+          $nsis = Join-Path $env:GITHUB_WORKSPACE 'target\release\bundle\nsis'
+          if (Test-Path -LiteralPath $nsis) {
+            Get-ChildItem -LiteralPath $nsis -Filter '*.exe' -File | Remove-Item -Force
+          }
           ..\web\node_modules\.bin\tauri.cmd build --ci -- --locked
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build verification CLI
+        run: cargo build --locked --release -p fdx-cli
       - uses: actions/cache/save@v4
         if: steps.release_cache.outputs.cache-hit != 'true'
         with:
           path: target/release
           key: ${{ steps.release_cache.outputs.cache-primary-key }}
-      - name: Build CLI and run independent conservation checks
+      - name: Independent conservation checks
         run: |
-          cargo build --locked --release -p fdx-cli
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/compare_engines.py target/release/fdx-cli.exe
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Install WebDriver on runner

@@ -1,13 +1,12 @@
-name: Publish a verified Windows build
+name: Publish a verified FDX Atelier Windows installer
 on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: Successful Windows Tauri workflow run ID
+        description: Successful FDX Atelier Windows workflow run ID
         required: true
       tag:
-        description: Release tag pointing to the exact verified commit
-        default: v2.0.0
+        description: Version tag (vX.Y.Z) pointing to the exact verified commit
         required: true
 permissions:
   contents: write
@@ -18,9 +17,20 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Synthetic release promotion checks
+        run: python -m unittest discover -s scripts/tests -p 'test_tauri_release.py' -v
+      - name: Read manifests from the release tag, not the publishing branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          path: verified-source
+          persist-credentials: false
       - name: Validate provenance and download verified build on runner
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.run_id }}
           TAG: ${{ inputs.tag }}
-        run: python scripts/promote_tauri.py
+        run: python scripts/promote_tauri.py --source-root verified-source

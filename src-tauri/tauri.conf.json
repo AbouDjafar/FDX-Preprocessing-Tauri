@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "FDX Atelier Tauri",
-  "version": "2.0.0",
+  "productName": "FDX Atelier",
+  "version": "2.1.0",
   "identifier": "com.fdx.atelier.tauri",
   "build": {
     "frontendDist": "../web/dist"
@@ -15,8 +15,8 @@
     "targets": ["nsis"],
     "shortDescription": "Preparation locale de classeurs metier",
     "category": "Productivity",
-    "resources": {"../qa/portable/licenses/": "licenses/", "../docs/GUIDE-TAURI.md": "GUIDE-TAURI.md"},
+    "resources": {"../qa/licenses/": "licenses/", "../docs/GUIDE-TAURI.md": "GUIDE-TAURI.md"},
     "icon": ["icons/32x32.png","icons/128x128.png","icons/icon.ico"],
-    "windows": {"webviewInstallMode":{"type":"embedBootstrapper"},"nsis":{"languages":["French"],"displayLanguageSelector":false,"installMode":"currentUser"}}
+    "windows": {"webviewInstallMode":{"type":"embedBootstrapper"},"nsis":{"languages":["French"],"displayLanguageSelector":false,"installMode":"currentUser","installerHooks":"../qa/installer-hooks.nsh"}}
   }
 }

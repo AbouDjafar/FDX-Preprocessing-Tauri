@@ -16,6 +16,15 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/oracle-requirements.txt
+      - name: Release metadata and synthetic promotion checks
+        run: |
+          python scripts/promote_tauri.py --check-manifests
+          python -m unittest discover -s scripts/tests -p 'test_tauri_release.py' -v
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -33,11 +42,6 @@ jobs:
         run: cargo clippy --locked -p fdx-core -p fdx-cli --all-targets -- -D warnings
       - name: Native CLI self-test
         run: cargo run --locked -p fdx-cli -- selftest --output qa/selftest.json --scale 10000
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: scripts/oracle-requirements.txt
       - name: Reference engine and independent Excel checks
         env:
           PYTHONPATH: src

@@ -1163,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "fdx-atelier-tauri"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "chrono",
  "encoding_rs",
@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "fdx-cli"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "clap",
  "fdx-core",
@@ -1190,7 +1190,7 @@ dependencies = [
 
 [[package]]
 name = "fdx-core"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "bigdecimal",
  "chrono",
